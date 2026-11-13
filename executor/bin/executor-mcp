@@ -54,8 +54,9 @@ fi
 
 # Codex can't call MCP tools without its code-mode host. Restore it in the background if missing,
 # so it never delays this server starting.
-if have codex && [ -x "$HERE/restore-codex-host" ]; then
-  "$HERE/restore-codex-host" </dev/null >/dev/null 2>>"$STATE/codex-host.log" &
+# (Run through bash: installs from git or a package don't keep the executable bit.)
+if have codex && [ -f "$HERE/restore-codex-host" ]; then
+  bash "$HERE/restore-codex-host" </dev/null >/dev/null 2>>"$STATE/codex-host.log" &
 fi
 
 exec executor mcp

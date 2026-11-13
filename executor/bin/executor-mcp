@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Starts Executor's stdio MCP server for Zeron, keeping the CLI installed and fresh with Bun.
+# stdout belongs to the MCP protocol, so everything we say goes to stderr.
+set -u
+
+log() { echo "executor plugin: $*" >&2; }
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+STATE="${XDG_DATA_HOME:-$HOME/.local/share}/zeron-executor"
+STAMP="$STATE/last-update"
+CHANNEL="${ZERON_EXECUTOR_CHANNEL:-beta}"
+MAX_AGE="${ZERON_EXECUTOR_MAX_AGE:-86400}"   # seconds between update checks
+
+mkdir -p "$STATE"
+
+# Zeron may start us with a thin PATH; add Bun's and Node's usual homes and the login shell's PATH.
+PATH="$HOME/.bun/bin:$HOME/.local/node/bin:$PATH"
+LOGIN_PATH="$(bash -lc 'printf %s "$PATH"' 2>/dev/null || true)"
+[ -n "$LOGIN_PATH" ] && PATH="$LOGIN_PATH:$PATH"
+export PATH
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# Executor's launcher runs on Node; Bun installs and updates it.
+if ! have node; then
+  log "Node.js was not found on PATH ($PATH). Install Node.js (https://nodejs.org), then reload the plugin."
+  exit 1
+fi
+
+stale() {
+  have executor || return 0
+  [ -f "$STAMP" ] || return 0
+  local now last
+  now="$(date +%s)"
+  last="$(cat "$STAMP" 2>/dev/null || echo 0)"
+  [ $((now - last)) -ge "$MAX_AGE" ]
+}
+
+if stale; then
+  if have bun; then
+    log "installing/updating executor@$CHANNEL with bun"
+    if bun install -g "executor@$CHANNEL" >&2; then
+      date +%s > "$STAMP"
+    else
+      log "install failed"
+      have executor || exit 1
+      log "continuing with the version already installed"
+    fi
+  elif ! have executor; then
+    log "Bun was not found on PATH ($PATH). Install Bun (https://bun.sh), then reload the plugin."
+    exit 1
+  fi
+fi
+
+# Codex can't call MCP tools without its code-mode host. Restore it in the background if missing,
+# so it never delays this server starting.
+if have codex && [ -x "$HERE/restore-codex-host" ]; then
+  "$HERE/restore-codex-host" </dev/null >/dev/null 2>>"$STATE/codex-host.log" &
+fi
+
+exec executor mcp

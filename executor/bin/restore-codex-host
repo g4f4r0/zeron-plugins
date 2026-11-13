@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Restores `codex-code-mode-host` beside the `codex` binary when it's missing.
+# Codex >= 0.153 can't call any MCP tool without it, and some installers ship only `codex`.
+# Usage: restore-codex-host [path-to-codex] [version]
+# Fetches the asset from the matching openai/codex GitHub release and checks it against the
+# SHA-256 digest GitHub publishes for that asset before installing. Output goes to stderr.
+set -u
+
+log() { echo "executor plugin (codex host): $*" >&2; }
+
+CODEX="${1:-$(command -v codex || true)}"
+[ -n "$CODEX" ] && [ -e "$CODEX" ] || exit 0          # no Codex here: nothing to do
+CODEX="$(readlink -f "$CODEX")"
+DIR="$(dirname "$CODEX")"
+HOST="$DIR/codex-code-mode-host"
+[ -e "$HOST" ] && exit 0                              # already there
+
+VERSION="${2:-$("$CODEX" --version 2>/dev/null | awk '{print $NF}')}"
+case "$VERSION" in [0-9]*.[0-9]*.[0-9]*) ;; *) log "can't tell the Codex version ('$VERSION'); skipping"; exit 0 ;; esac
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64)          TARGET=x86_64-unknown-linux-musl ;;
+  Linux-aarch64|Linux-arm64) TARGET=aarch64-unknown-linux-musl ;;
+  Darwin-arm64)          TARGET=aarch64-apple-darwin ;;
+  Darwin-x86_64)         TARGET=x86_64-apple-darwin ;;
+  *) log "unsupported platform $(uname -s)-$(uname -m); skipping"; exit 0 ;;
+esac
+
+for tool in curl tar python3; do
+  command -v "$tool" >/dev/null 2>&1 || { log "$tool is required; skipping"; exit 0; }
+done
+if command -v sha256sum >/dev/null 2>&1; then SHA() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then SHA() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else log "no sha256 tool; skipping"; exit 0; fi
+
+STATE="${XDG_DATA_HOME:-$HOME/.local/share}/zeron-executor"
+mkdir -p "$STATE"
+LOCK="$STATE/codex-host.lock"
+# One restore at a time (several providers may start the launcher together).
+if ! mkdir "$LOCK" 2>/dev/null; then exit 0; fi
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/codex-host.XXXXXX")"
+trap 'rm -rf "$TMP" "$LOCK"' EXIT
+
+ASSET="codex-code-mode-host-$TARGET.tar.gz"
+TAG="rust-v$VERSION"
+log "codex-code-mode-host missing beside $CODEX; fetching $ASSET from $TAG"
+
+EXPECT="$(curl -fsSL "https://api.github.com/repos/openai/codex/releases/tags/$TAG" 2>/dev/null \
+  | python3 -I -c 'import sys,json
+a=sys.argv[1]
+try:
+    r=json.load(sys.stdin)
+    print(next(x["digest"] for x in r["assets"] if x["name"]==a).split(":",1)[1])
+except Exception:
+    pass' "$ASSET")"
+case "$EXPECT" in ????????????????????????????????????????????????????????????????) ;; *) log "no published digest for $ASSET at $TAG; not installing"; exit 0 ;; esac
+
+curl -fsSL -o "$TMP/$ASSET" "https://github.com/openai/codex/releases/download/$TAG/$ASSET" || { log "download failed"; exit 0; }
+[ "$(SHA "$TMP/$ASSET")" = "$EXPECT" ] || { log "checksum mismatch; not installing"; exit 0; }
+
+mkdir "$TMP/x"
+tar -xzf "$TMP/$ASSET" -C "$TMP/x" || { log "extract failed"; exit 0; }
+[ "$(find "$TMP/x" -type f | wc -l)" = 1 ] || { log "unexpected archive contents; not installing"; exit 0; }
+install -m755 "$(find "$TMP/x" -type f)" "$HOST" && log "installed $HOST"

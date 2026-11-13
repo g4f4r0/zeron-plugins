@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Copy plugins from Zeron's live folder into this repo, so git can track them.
+# Zeron owns ~/.zeron/plugins (it re-signs on save and rejects symlinks), so the repo holds copies.
+# Usage: ./sync executor [other-plugin-id ...]
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+LIVE="${ZERON_PLUGINS_DIR:-$HOME/.zeron/plugins}"
+
+[ $# -gt 0 ] || { echo "usage: $0 <plugin-id> [...]" >&2; exit 2; }
+
+for id in "$@"; do
+  case "$id" in *[!a-z0-9-]*|"") echo "bad plugin id: $id" >&2; exit 2 ;; esac
+  [ -d "$LIVE/$id" ] && [ ! -L "$LIVE/$id" ] || { echo "no plugin folder: $LIVE/$id" >&2; exit 1; }
+  rm -rf "$ROOT/$id"
+  cp -a "$LIVE/$id" "$ROOT/$id"
+  echo "synced $id ($(grep -o '"version": "[^"]*"' "$ROOT/$id/zeron-plugin.json" | head -1))"
+done
+git -C "$ROOT" status --short

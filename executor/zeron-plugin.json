@@ -1,0 +1,26 @@
+{
+  "id": "executor",
+  "name": "Executor",
+  "version": "0.1.0",
+  "description": "Adds the executor.sh MCP gateway as one shared MCP server for every provider.",
+  "entry": "init.luau",
+  "permissions": [
+    "native"
+  ],
+  "mcp": {
+    "command": "./bin/executor-mcp",
+    "args": []
+  },
+  "signature": {
+    "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
+    "files": {
+      "README.md": "4d9d2c91ca69226f4ba61e35ae795ce535765517d0a169decfc0ecaf95dd5a41",
+      "bin/executor-mcp": "2a470d6ab8ca298a3e9f27b38c0fb4145573e543d0abd5bc5bee3ba722daa094",
+      "bin/restore-codex-host": "4845929409a9236a945a7c60e6e4da20e28d30b05c3bfb0921e6ba2e47b7dfcc",
+      "init.luau": "faf83abee8167510c42bd2c497ad7b437cd35725a28cf3eab969d932cb8da2fd",
+      "locales/en.json": "eb98401ae294a06fd33041170c7d6fbd9169f2e8b67e20571ca0bc03cf5ad363",
+      "zeron.luau": "0ef4194bdf34ac0f30315e783972fdc82c05d4269f22d885e15cb59430cb2cd7"
+    },
+    "sig": "zYeqj3oPWzpC7wUJ4niTNu-cwELwqcZ861a1_f90eepltkfW1Ls8oUiA77E-d-J3mF5AUY8r8K2-0F_-lDGhCA"
+  }
+}

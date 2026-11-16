@@ -20,6 +20,9 @@
 -- the script finds it when the page next talks to it (any input does) and
 -- sends the text the way voxl's own paste does (`c,<text>`). voxl only
 -- reports the desktop's clipboard when it changes, never on connecting.
+--
+-- The stream only while someone can see it: a tab hidden, or Zeron's window
+-- hidden, for AWAY_S closes its page, and the desktop stops sending.
 
 local zeron = require("./zeron")("desktop")
 local PanelHome = require("@ds/panel_home")
@@ -108,8 +111,44 @@ local function js_string(s: string): string
 end
 
 -- How long a loaded page has to say how it stands before the tab shows it
--- as it is (a page that can't, as one without the bridge).
-local QUIET_S = 4
+-- as it is (a page that can't, as one without the bridge), in ms.
+local QUIET_MS = 4000
+
+-- The stream while nobody sees it: zgx keeps a page by id after its tab
+-- hides (another tab shows, another chat opens, the tab closes) and while
+-- Zeron's window is hidden, and voxl's page goes on streaming there. A page
+-- away AWAY_S is closed, so the desktop stops sending; a tab back sooner
+-- finds its page still connected. `away` holds each page away, by id: when
+-- it went, and whether it's been closed.
+local AWAY_S = 30
+type Away = { web: any, since: number, closed: boolean }
+local away: { [string]: Away } = {}
+local sweeping = pcall(zeron.every, AWAY_S, function()
+	local now = os.time()
+	for id, a in away do
+		if now - a.since >= AWAY_S then
+			away[id] = nil
+			a.closed = true
+			pcall(function()
+				a.web:close()
+			end)
+		end
+	end
+end)
+-- A page going away: kept for AWAY_S, or closed now if nothing would close
+-- it later.
+local function leave(id: string, web: any): Away
+	local a = away[id] or { web = web, since = os.time(), closed = false }
+	if sweeping then
+		away[id] = a
+	else
+		a.closed = true
+		pcall(function()
+			web:close()
+		end)
+	end
+	return a
+end
 
 -- A service call's reason, as the tab says it.
 local REASONS = {
@@ -186,8 +225,15 @@ zeron.tab(KIND, function(tab: any): Node
 	local state = ui.use_state({ phase = "loading" } :: any)
 	-- How voxl's page says it stands: "waiting" until it does.
 	local page = ui.use_state({ state = "waiting" } :: any)
-	-- zgx keeps the page by id across tab switches and reloads.
+	-- zgx keeps the page by id across tab switches and reloads. One back
+	-- within AWAY_S is still connected, and is taken as it is.
 	local web = (ui :: any).web(id)
+	local back = away[id]
+	away[id] = nil
+	local kept = back ~= nil and not back.closed
+	-- The page away while Zeron's window is hidden, as if its tab were.
+	local hiding: Away? = nil
+	local finished: () -> ()
 	local loaded: string? = nil
 	local said = 0
 	-- The text both clipboards hold, as far as the tab knows; nil when the
@@ -244,6 +290,7 @@ zeron.tab(KIND, function(tab: any): Node
 	-- again with it.
 	local function again()
 		loaded = nil
+		kept = false
 		page:set({ state = "waiting" })
 		state:set({ phase = "loading" })
 		check()
@@ -257,7 +304,11 @@ zeron.tab(KIND, function(tab: any): Node
 		if s.url ~= loaded then
 			loaded = s.url
 			page:set({ state = "waiting" })
-			if s.url == web.url then
+			if kept and s.url == web.url then
+				-- Still connected: asked how it stands, once its view is there.
+				kept = false
+				ui.after(0, finished)
+			elseif s.url == web.url then
 				web:reload()
 			else
 				web:load(s.url)
@@ -266,9 +317,34 @@ zeron.tab(KIND, function(tab: any): Node
 	end)
 	check()
 
+	-- Zeron's window hidden: the page away, closed after AWAY_S. Shown
+	-- again: kept if it's still there, else made and loaded anew.
+	ui.effect(function()
+		if not zeron.window().shown then
+			if not hiding then
+				hiding = leave(id, web)
+			end
+		elseif hiding then
+			local h = hiding
+			hiding = nil
+			if h.closed then
+				web = (ui :: any).web(id)
+				again()
+			elseif away[id] == h then
+				away[id] = nil
+			end
+		end
+	end)
+	-- The tab hidden or closed: its page away (unless already closed).
+	pcall(ui.on_cleanup, function()
+		if not (hiding and hiding.closed) then
+			leave(id, web)
+		end
+	end)
+
 	-- Once a load has finished: ask the page how it stands, and show it as
 	-- it is if it doesn't say.
-	local function finished()
+	function finished()
 		said += 1
 		local mine = said
 		held = nil
@@ -276,7 +352,7 @@ zeron.tab(KIND, function(tab: any): Node
 			web:run(PAGE_JS)
 		end)
 		clip_give()
-		ui.after(QUIET_S, function()
+		ui.after(QUIET_MS, function()
 			if mine == said and page:peek().state == "waiting" then
 				page:set({ state = "quiet" })
 			end

@@ -8,16 +8,50 @@
     "start": "Start desktop"
   },
   "starting": { "title": "Starting the desktop…" },
+  "connecting": { "title": "Connecting…" },
+  "reconnecting": { "title": "Reconnecting…" },
   "missing": {
     "title": "No desktop on this device",
-    "body": "Run desktop.sh install on it first (~/.local/share/agent-desktop)."
+    "body": "Install the agent desktop on this session's device, then try again."
   },
   "no_url": {
-    "title": "The desktop has no link for this window",
-    "body": "Its stream isn't published on the tailnet yet (tailscale serve)."
+    "title": "The desktop has no link yet",
+    "body": "Its stream isn't shared on the tailnet. Share it, then try again."
   },
+  "failed": { "title": "Couldn't load the desktop" },
+  "denied": {
+    "title": "The desktop didn't let Zeron in",
+    "body": "Its sign-in link was turned down. Try again for a fresh one."
+  },
+  "unsupported": { "title": "The desktop can't play here" },
   "error": {
-    "title": "Couldn't reach the desktop",
-    "body": "The device said: {why}"
+    "not_approved": {
+      "title": "Desktop is waiting for you to allow it",
+      "body": "Allow it in Settings → Plugins on this session's device, then try again."
+    },
+    "offline": {
+      "title": "Can't reach the desktop",
+      "body": "Zeron can't reach this session's device right now."
+    },
+    "not_installed": {
+      "title": "Desktop isn't on this session's device",
+      "body": "Install it in Settings → Plugins on that device, then try again."
+    },
+    "off": {
+      "title": "Desktop is off on this session's device",
+      "body": "Turn it on in Settings → Plugins on that device, then try again."
+    },
+    "version_mismatch": {
+      "title": "Desktop needs an update",
+      "body": "This session's device has a different version. Update it in Settings → Plugins."
+    },
+    "timeout": {
+      "title": "The desktop didn't answer",
+      "body": "Its device took too long. Try again in a moment."
+    },
+    "failed": {
+      "title": "Couldn't reach the desktop",
+      "body": "Something went wrong on this session's device. Try again in a moment."
+    }
   }
 }

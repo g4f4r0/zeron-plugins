@@ -11,6 +11,8 @@ The desktop is display `:1` (Xvfb, 1920x1080) with the Openbox window manager, a
 - Closing the browser leaves it closed; its unit restarts it only after a crash. `bash ~/.local/share/agent-desktop/desktop.sh open browser [url]` opens it again with CDP, or opens a new window or the URL in the running one. `open files [dir]` and `open terminal` open the other two. The menu and keys run the same command, and agents should too, because it starts the programs with the desktop's environment.
 - `service.luau` runs on every device where the plugin is allowed. It reads the units with `systemctl --user show` and answers `status` (whether each part is running, plus the voxl link) and `start` (`systemctl --user start agent-desktop.target`). The desktop counts as ready without the browser. A window on the same device gets voxl's local link. A window on another device gets the tailnet HTTPS link.
 - `init.luau` adds a Desktop row (key D) to an empty panel's home page. The row opens a Desktop tab for the chat's device. The tab shows the stream when the desktop is running, and offers a Start button when it's stopped.
+- The tab copies text between your device's clipboard and the desktop's, because a page in Zeron's web view can't use the clipboard reliably. While the desktop shows and Zeron's window is in front, new text you copy on your device goes to the desktop, and text copied on the desktop comes back to your device. It checks when Zeron comes to the front and then every second. Text only; images still go through voxl's own paste.
+- Links open in the desktop's browser. Thunar, the terminal, `xdg-open` and CLIs that read `$BROWSER` all open a link as a tab there. Only the desktop's programs get this, through `~/.local/share/agent-desktop/bin` and `xdg`.
 
 ## Set up a device to host the desktop (Ubuntu)
 
@@ -22,7 +24,7 @@ The desktop is display `:1` (Xvfb, 1920x1080) with the Openbox window manager, a
 6. To watch the desktop from other devices, publish the stream on the tailnet with `sudo tailscale serve --bg --https=6443 http://127.0.0.1:6080`.
 7. Point `agent-browser` at Fortress with `echo '{"cdp": "9222"}' > ~/.agent-browser/config.json`. Agents run `agent-desktop` with `DISPLAY=:1`.
 
-Allow the plugin in Zeron (Settings → Plugins) on the device hosting the desktop and on every device you watch it from. It asks for `commands`, which lets it run `systemctl` as you; its service needs that to read and start the units.
+Allow the plugin in Zeron (Settings → Plugins) on the device hosting the desktop and on every device you watch it from. It asks for `commands`, which lets it run `systemctl` as you; its service needs that to read and start the units. It also asks for `clipboard`, for copy and paste between your device and the desktop.
 
 ## Overrides
 

@@ -1,7 +1,7 @@
 {
   "id": "desktop",
   "name": "Desktop",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "The agents' desktop on a chat's device (Openbox, Fortress, agent-desktop), live in the chat's panel, streamed by voxl.",
   "entry": "init.luau",
   "service": "service.luau",
@@ -10,6 +10,7 @@
     "panel.tabs",
     "sessions.read",
     "web",
+    "clipboard",
     "service",
     "commands"
   ],
@@ -19,15 +20,15 @@
   "signature": {
     "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
     "files": {
-      "README.md": "dbd6c7d8fa7586476adb958547db50b775a6de91df0b341bf7932e21fad07b0b",
+      "README.md": "93ad4a70999547af95e5a9b925e0bdab55d788556aa49f270fe2626d28df3bf9",
       "host/chromium-policy.json": "6f7ffa5e668d12762a660bb6177aa29beb384c0e2aea20b0220a8634160bd08f",
-      "host/desktop.sh": "10e9a868fa54375cbe2372802893927f7a32ca9bf672a091ce05b83dd2feeb15",
+      "host/desktop.sh": "87024568da6005d5daf1bb68e670c10ece2d8932177defc782fd52fe992e3d67",
       "host/fortress.apparmor": "2001f53b3100f0d29fa16f7a8e3c677b1695007b515ff5e79c7bf00bc909369d",
-      "init.luau": "721eec10e7abe12403e3abe2056f279e8c812fd8dc7f5f0a948c0c860b8da48f",
+      "init.luau": "0ac282b0b5e5316f770ccc5e480f07f21a606c2abb62c1210931ff8f94bb3dca",
       "locales/en.json": "81a99c8f06f55d6dbfd69f4e2aa46df26602f3299c9dc0f6f867d87be3b2a595",
       "service.luau": "e1b85d7baaccd7b8201039330e9e6156b6bdc52fd8e3d5bca15ab6246cf23b46",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "frd0G74MWm16W25JOOcEr1kudSzTChuMIFh1vbne71-pEecgpWG5zoYQgdWu2HPEYiqdfiSNEWDVBe6Z5WgNCg"
+    "sig": "ibz-WoO73ZwKW0aRlIAKqWXcXkITXt3t8C7PdSzPut3VfZnhmjfi7pPjMPPGHgj-DXVKk4MRno0AAHrEHAt_BQ"
   }
 }

@@ -11,6 +11,15 @@
 -- words of its own ("Connecting…", "Reconnecting…"); a script run in it
 -- hides those and tells the tab instead (`window.zgx.postMessage`), which
 -- draws them over the page in Zeron's way.
+--
+-- The clipboard: a page in Zeron's web view can't count on reading or
+-- writing this device's clipboard, so the tab moves the text itself
+-- (`clipboard`). While the desktop shows and Zeron's window is in front, new
+-- text on this device's clipboard goes to the desktop's, and text copied on
+-- the desktop comes back here. voxl's socket lives in a worker of the page;
+-- the script finds it when the page next talks to it (any input does) and
+-- sends the text the way voxl's own paste does (`c,<text>`). voxl only
+-- reports the desktop's clipboard when it changes, never on connecting.
 
 local zeron = require("./zeron")("desktop")
 local PanelHome = require("@ds/panel_home")
@@ -52,8 +61,51 @@ local PAGE_JS = [[
     send({ state, text });
   };
   window.__zeronDesktopSay();
+  if (!window.__zeronDesktopClipboard && window.Worker) {
+    window.__zeronDesktopClipboard = true;
+    const post = Worker.prototype.postMessage;
+    let worker = null;
+    let pending = null;
+    const give = (w, text) => post.call(w, { t: 'send', d: 'c,' + text });
+    const adopt = (w) => {
+      if (worker === w) return;
+      worker = w;
+      w.addEventListener('message', (e) => {
+        const m = e.data;
+        if (m && m.t === 'clip' && typeof m.d === 'string') send({ clip: m.d });
+      });
+      if (pending !== null) { give(w, pending); pending = null; }
+    };
+    Worker.prototype.postMessage = function (...args) {
+      adopt(this);
+      return post.apply(this, args);
+    };
+    window.__zeronDesktopClip = (text) => {
+      if (worker) give(worker, text); else pending = text;
+    };
+    document.addEventListener('keydown', (e) => {
+      if (e.metaKey && !e.altKey && (e.key === 'v' || e.key === 'V') && !e.repeat) send({ paste: true });
+    }, true);
+  }
 })();
 ]]
+
+-- How often the tab looks at this device's clipboard while it shows the
+-- desktop in the window in front (milliseconds). Switching to Zeron looks
+-- at once.
+local CLIP_MS = 1000
+
+-- A JavaScript string literal for any text.
+local function js_string(s: string): string
+	local ok, lit = pcall(ui.json.encode, s)
+	if ok and type(lit) == "string" then
+		return (string.gsub(string.gsub(lit, "\226\128\168", "\\u2028"), "\226\128\169", "\\u2029"))
+	end
+	local out = string.gsub(s, "[%c\"\\]", function(c: string): string
+		return string.format("\\u%04x", string.byte(c))
+	end)
+	return `"{out}"`
+end
 
 -- How long a loaded page has to say how it stands before the tab shows it
 -- as it is (a page that can't, as one without the bridge).
@@ -138,6 +190,33 @@ zeron.tab(KIND, function(tab: any): Node
 	local web = (ui :: any).web(id)
 	local loaded: string? = nil
 	local said = 0
+	-- The text both clipboards hold, as far as the tab knows; nil when the
+	-- page hasn't been given any since it loaded or reconnected.
+	local held: string? = nil
+
+	-- This device's clipboard to the desktop's, when it has new text.
+	local function clip_give()
+		if not zeron.window(true).active then
+			return
+		end
+		local ok, text = pcall(ui.clipboard.read)
+		if not ok or type(text) ~= "string" or text == "" or text == held then
+			return
+		end
+		held = text
+		pcall(function()
+			web:run(`window.__zeronDesktopClip && window.__zeronDesktopClip({js_string(text)});`)
+		end)
+	end
+	-- The desktop's clipboard to this device's: only while Zeron's window is
+	-- in front, so what an agent copies while you work elsewhere stays there.
+	local function clip_take(text: any)
+		if type(text) ~= "string" or text == "" or text == held or not zeron.window(true).active then
+			return
+		end
+		held = text
+		pcall(ui.clipboard.write, text)
+	end
 
 	local function apply(s: any)
 		if not s.installed then
@@ -192,9 +271,11 @@ zeron.tab(KIND, function(tab: any): Node
 	local function finished()
 		said += 1
 		local mine = said
+		held = nil
 		pcall(function()
 			web:run(PAGE_JS)
 		end)
+		clip_give()
 		ui.after(QUIET_S, function()
 			if mine == said and page:peek().state == "waiting" then
 				page:set({ state = "quiet" })
@@ -233,6 +314,14 @@ zeron.tab(KIND, function(tab: any): Node
 	end
 
 	local function view(): Node
+		-- The clipboard while the desktop shows: at once when Zeron's window
+		-- comes to the front, and every CLIP_MS while it stays there.
+		ui.effect(function()
+			if zeron.window().active then
+				clip_give()
+			end
+		end)
+		ui.every(CLIP_MS, clip_give)
 		return ui.column {
 		relative = true,
 		w_full = true,
@@ -250,7 +339,16 @@ zeron.tab(KIND, function(tab: any): Node
 					return
 				end
 				if type(value.state) == "string" then
+					-- Connected again: the desktop may have missed text meanwhile.
+					if value.state == "connected" and page:peek().state ~= "connected" then
+						held = nil
+						clip_give()
+					end
 					page:set({ state = value.state, text = value.text })
+				elseif value.clip ~= nil then
+					clip_take(value.clip)
+				elseif value.paste then
+					clip_give()
 				end
 			end,
 			on_navigate = function(e: any)

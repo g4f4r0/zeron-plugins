@@ -36,11 +36,45 @@ export DISPLAY="$DISPLAY_NUM"
 # What every program on the desktop runs with. System programs only: GTK's image loaders
 # (glycin) run in the system bwrap, which AppArmor allows; a bwrap earlier on PATH
 # (~/.local/bin) is refused, and GTK apps crash on their icons. The accessibility bridge
-# lets agent-desktop see GTK 3 apps.
+# lets agent-desktop see GTK 3 apps. $STATE/bin and $STATE/xdg (see `links`) send every
+# link to the desktop's own browser.
 desktop_env() {
-	export PATH=/usr/local/bin:/usr/bin:/bin
+	export PATH="$STATE/bin:/usr/local/bin:/usr/bin:/bin"
 	export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=Openbox GTK_THEME=Adwaita:dark
 	export GTK_MODULES=gail:atk-bridge NO_AT_BRIDGE=0
+	export XDG_DATA_DIRS="$STATE/xdg:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+	export BROWSER="$STATE/bin/agent-desktop-browser"
+}
+
+# Links open as a tab in the desktop's browser, from GTK apps (Thunar, the terminal: GIO reads
+# the handler and its mimeapps.list from $STATE/xdg), from `xdg-open` and from CLIs that read
+# $BROWSER. Only the desktop's programs see these; the rest of the user's session doesn't.
+links() {
+	mkdir -p "$STATE/bin" "$STATE/xdg/applications"
+	cat >"$STATE/bin/agent-desktop-browser" <<EOF
+#!/bin/sh
+exec bash "$STATE/desktop.sh" open browser "\$@"
+EOF
+	cat >"$STATE/bin/xdg-open" <<'EOF'
+#!/bin/sh
+exec gio open "$@"
+EOF
+	chmod 0755 "$STATE/bin/agent-desktop-browser" "$STATE/bin/xdg-open"
+	cat >"$STATE/xdg/applications/agent-desktop-browser.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Browser
+Exec=$STATE/bin/agent-desktop-browser %u
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;application/xhtml+xml;
+NoDisplay=true
+EOF
+	cat >"$STATE/xdg/applications/mimeapps.list" <<'EOF'
+[Default Applications]
+x-scheme-handler/http=agent-desktop-browser.desktop
+x-scheme-handler/https=agent-desktop-browser.desktop
+text/html=agent-desktop-browser.desktop
+application/xhtml+xml=agent-desktop-browser.desktop
+EOF
 }
 
 # The image scaled to cover the screen, over a plain colour that shows when there's no image
@@ -141,6 +175,7 @@ session)
 	pactl list short sinks 2>/dev/null | grep -q $'\toutput\t' ||
 		pactl load-module module-null-sink sink_name=output >/dev/null
 	desktop_env
+	links
 	openbox_config
 	xsetroot -cursor_name left_ptr
 	# The wallpaper again whenever the screen changes size (voxl fits it to the viewer).
@@ -173,6 +208,7 @@ browser)
 	;;
 open)
 	desktop_env
+	[ -x "$STATE/bin/agent-desktop-browser" ] || links
 	case "${2:-}" in
 	browser)
 		# Closing the last window ends the browser and its unit stays stopped. Starting the unit

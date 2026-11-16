@@ -1,8 +1,8 @@
 {
   "id": "desktop",
   "name": "Desktop",
-  "version": "0.3.1",
-  "description": "The agents' desktop on a chat's device (Openbox, Fortress, agent-desktop), live in the chat's panel, streamed by voxl.",
+  "version": "0.3.2",
+  "description": "A Linux desktop for agents, live in the chat's panel.",
   "entry": "init.luau",
   "service": "service.luau",
   "permissions": [
@@ -29,6 +29,6 @@
       "service.luau": "e1b85d7baaccd7b8201039330e9e6156b6bdc52fd8e3d5bca15ab6246cf23b46",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "DB6Ri5YNfGSJAlNxLzKOzrto_4qseIb29RSf45kC3WpW-wy_LofI4bHtrCBDym8_fAB8Scgsz_rgTp3WEEhYDg"
+    "sig": "ltEq-KL6DmKPbyxvEnE1ixsYf6o81c2Hj6nuYXF6KgoJ0XHfwo7jV1Sqr2PVLmUQpnazbmcUnbcx0CNkdznKDA"
   }
 }

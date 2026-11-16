@@ -5,7 +5,7 @@ My Zeron plugins, one folder per plugin, tagged per version (`<id>-v<version>`).
 | Plugin | What it does |
 |---|---|
 | [`executor`](executor/) | Adds the [executor.sh](https://executor.sh) MCP gateway to Zeron as one shared MCP server for every provider. |
-| [`desktop`](desktop/) | A Linux desktop for agents (XFCE, Fortress, agent-browser, agent-desktop), live in a chat's panel through voxl. |
+| [`desktop`](desktop/) | A Linux desktop for agents, live in the chat's panel. |
 
 ## Install
 

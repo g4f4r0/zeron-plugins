@@ -1,6 +1,7 @@
 -- Desktop's service: on the device a chat runs on, how the agents' desktop
 -- stands and its sign-in link, read from its systemd user units
--- (agent-desktop.target: Xvfb, XFCE, Fortress, voxl), and starting it.
+-- (agent-desktop.target: Xvfb, Openbox, Fortress, voxl), and starting it.
+-- The desktop is ready without the browser: closing Fortress leaves it closed.
 -- The units are made by ~/.local/share/agent-desktop/desktop.sh install.
 --
 --   status  -> { installed, running = { part = bool }, ready, url? }
@@ -70,7 +71,9 @@ local function status(call: any): any
 		end
 		local up = unit ~= nil and unit.ActiveState == "active"
 		running[p] = up
-		ready = ready and up
+		if p ~= "browser" then
+			ready = ready and up
+		end
 	end
 	local stream = u["agent-desktop-stream.service"]
 	local env = stream and stream.Environment

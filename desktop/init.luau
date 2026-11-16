@@ -114,26 +114,17 @@ zeron.place {
 	end,
 }
 
--- Work going on: EmptyState's small tile with a ring in it, and its words.
-local function working(title: any): Node
-	return EmptyState {
-		size = "sm",
-		fill = true,
-		art = ui.row {
-			w = 36,
-			h = 36,
-			shrink = 0,
-			aria_hidden = true,
-			items = "center",
-			justify = "center",
-			rounded = "$radius.xl",
-			bg = "$zeron.secondary.bg",
-			border = 1,
-			border_color = "$border.subtle",
-			color = "$text.secondary",
-			Progress.ProgressRing { size = 16, tone = "neutral", label = title },
-		},
-		title = title,
+-- Work going on: a ring alone, centred in the tab (its words for screen
+-- readers only).
+local function working(label: any): Node
+	return ui.column {
+		w_full = true,
+		grow = 1,
+		min_h = 0,
+		items = "center",
+		justify = "center",
+		color = "$text.secondary",
+		Progress.ProgressRing { size = 16, tone = "neutral", label = label },
 	}
 end
 

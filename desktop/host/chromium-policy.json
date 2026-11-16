@@ -1,4 +1,5 @@
 {
   "CommandLineFlagSecurityWarningsEnabled": false,
-  "BrowserSignin": 0
+  "BrowserSignin": 0,
+  "URLBlocklist": ["127.0.0.1:6080", "localhost:6080", "ts.net:6443"]
 }

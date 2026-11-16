@@ -1,0 +1,23 @@
+{
+  "row": { "label": "Desktop" },
+  "tab": { "title": "Desktop" },
+  "retry": "Try again",
+  "stopped": {
+    "title": "The desktop is stopped",
+    "body": "Start it to watch the agents' screen here.",
+    "start": "Start desktop"
+  },
+  "starting": { "title": "Starting the desktop…" },
+  "missing": {
+    "title": "No desktop on this device",
+    "body": "Run desktop.sh install on it first (~/.local/share/agent-desktop)."
+  },
+  "no_url": {
+    "title": "The desktop has no link for this window",
+    "body": "Its stream isn't published on the tailnet yet (tailscale serve)."
+  },
+  "error": {
+    "title": "Couldn't reach the desktop",
+    "body": "The device said: {why}"
+  }
+}

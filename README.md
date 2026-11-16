@@ -5,11 +5,12 @@ My Zeron plugins, one folder per plugin, tagged per version (`<id>-v<version>`).
 | Plugin | What it does |
 |---|---|
 | [`executor`](executor/) | Adds the [executor.sh](https://executor.sh) MCP gateway to Zeron as one shared MCP server for every provider. |
+| [`desktop`](desktop/) | A Linux desktop for agents (XFCE, Fortress, agent-browser, agent-desktop), live in a chat's panel through voxl. |
 
 ## Install
 
 ```
-install_plugin  url: g4f4r0/zeron-plugins  folder: executor
+install_plugin  url: g4f4r0/zeron-plugins  folder: executor   # or desktop
 ```
 
 Then allow it in Settings → Plugins. Later versions show up there as an update.

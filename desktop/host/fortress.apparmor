@@ -1,0 +1,8 @@
+abi <abi/5.0>,
+include <tunables/global>
+
+# Lets Fortress (the agents' browser) use user namespaces, so Chromium's sandbox stays on.
+profile agent-desktop-fortress /home/g4f4r0/.local/share/fortress/*/fortress-*/chrome flags=(unconfined) {
+  userns,
+  @{exec_path} mr,
+}

@@ -14,7 +14,7 @@ local zeron = require("./zeron")("paper")
 local MCP = "https://mcp.paper.design/"
 local LOGIN = "https://login.paper.design"
 local PROTOCOL = "2025-06-18"
-local VERSION = "0.1.1"
+local VERSION = "0.1.2"
 
 local auth = zeron.store("auth", {} :: any)
 

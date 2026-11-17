@@ -19,12 +19,66 @@
 local zeron = require("./zeron")("paper")
 local PanelHome = require("@ds/panel_home")
 local EmptyState = require("@ds/empty_state")
-local Progress = require("@ds/progress")
 local Button = require("@ds/button")
 local IconButton = require("@ds/icon_button").IconButton
 
 local KIND = "canvas"
 local HOME = "https://app.paper.design/"
+
+-- Paper's mark, as icon.svg draws it: in the text's colour, inset as
+-- Zeron's own glyphs are in their 24 units.
+local MARK = [[<svg xmlns="http://www.w3.org/2000/svg" viewBox="-3 -3 27 27"><path d="M3 0H21V13H13V3H3ZM0 3H3V13H13V21H0Z" fill="currentColor"/></svg>]]
+local function mark(size: number): Node
+	return ui.svg { code = MARK, w = size, h = size, shrink = 0, tint = "currentColor", aria_hidden = true }
+end
+
+-- Zeron's spinning ring (ds/progress's arc, the same motion), with the
+-- engine stepping its time: ProgressRing doesn't ask for that, so it holds
+-- its first frame. A clocked shader drops theme tokens, so its ink is the
+-- theme's colour, made again as the theme changes.
+local ARC = [[
+fn zp_arc(d:vec2<f32>,R:f32,c:f32,ha:f32,hw:f32)->f32 {
+ var th=degrees(atan2(d.x,-d.y));
+ var da=th-c; da=da-360.*round(da/360.);
+ if abs(da)<=ha { return abs(length(d)-R)-hw; }
+ let e=radians(c+sign(da)*ha);
+ return length(d-vec2(sin(e),-cos(e))*R)-hw;
+}
+fn fill(input:FillInput)->vec4<f32> {
+ let ink=input.params[0];
+ let q=input.params[1];
+ let hw=q.z*.5;
+ let d=input.p-input.size*.5;
+ let R=min(input.size.x,input.size.y)*.5-hw;
+ let groove=clamp(.5-(abs(length(d)-R)-hw)*input.scale,0.,1.)*q.w;
+ let t=input.time;
+ let len=30.+240.*(.5-.5*cos(t*2.4));
+ let c=t*300.+len*.5;
+ let ha=len*.5;
+ let arc=clamp(.5-zp_arc(d,R,c,ha,hw)*input.scale,0.,1.);
+ return vec4(ink.rgb,ink.a*max(arc,groove));
+}
+]]
+local SPIN = ui.shader(ARC, { fps = 60 })
+local function ring(size: number, label: string): Node
+	local stroke = math.max(1.5, size / 8)
+	local theme = (ui :: any).theme
+	return ui.presence(function(): string
+		return if theme and theme.current then tostring(theme.current:get()) else "theme"
+	end, function(): Node
+		local ink = if theme and theme.get then theme.get("text.secondary") else nil
+		return ui.div {
+			w = size,
+			h = size,
+			shrink = 0,
+			role = "status",
+			label = label,
+			bg_shader = SPIN,
+			shader_clock = true,
+			shader_params = { ink or "$text.secondary", { 0, 1, stroke, 0.18 } },
+		}
+	end)
+end
 
 -- A service call's reason, as the tab says it.
 local REASONS = {
@@ -105,7 +159,7 @@ zeron.place {
 		end)
 		return PanelHome.Choice {
 			id = "paper-open",
-			icon = "palette" :: any,
+			icon = mark(PanelHome.ICON) :: any,
 			label = zeron.t("row.label") :: any,
 			key = "P",
 			on_click = function()
@@ -128,7 +182,7 @@ local function page(id: string): any
 end
 
 -- Work going on: a ring alone, centred (its words for screen readers only).
-local function working(label: any): Node
+local function working(): Node
 	return ui.column {
 		w_full = true,
 		grow = 1,
@@ -136,7 +190,25 @@ local function working(label: any): Node
 		items = "center",
 		justify = "center",
 		color = "$text.secondary",
-		Progress.ProgressRing { size = 16, tone = "neutral", label = label },
+		ring(16, zeron.s("loading")),
+	}
+end
+
+-- Paper's mark on the quiet tile an empty state draws its glyph on (sm).
+local function tile(): Node
+	return ui.row {
+		w = 36,
+		h = 36,
+		shrink = 0,
+		aria_hidden = true,
+		items = "center",
+		justify = "center",
+		rounded = "$radius.xl",
+		bg = "$zeron.secondary.bg",
+		border = 1,
+		border_color = "$border.subtle",
+		color = "$text.secondary",
+		mark(18),
 	}
 end
 
@@ -384,7 +456,7 @@ zeron.tab(KIND, function(tab: any): Node
 					top = 0,
 					bottom = 0,
 					bg = "$background",
-					working(zeron.t("loading")),
+					working(),
 				}),
 				ui.show(trouble, ui.column {
 					absolute = true,
@@ -510,7 +582,7 @@ zeron.tab(KIND, function(tab: any): Node
 				items = "center",
 				justify = "center",
 				color = "$text.secondary",
-				Progress.ProgressRing { size = 16, tone = "neutral", label = zeron.t("signing_in") },
+				ring(16, zeron.s("signing_in")),
 			},
 			ui.column {
 				items = "center",
@@ -604,12 +676,12 @@ zeron.tab(KIND, function(tab: any): Node
 			return if #(l.files or {}) == 0 then "empty" else "home"
 		end, function(which: string): Node
 			if which == "working" then
-				return working(zeron.t("loading"))
+				return working()
 			elseif which == "code" then
 				return waiting()
 			elseif which == "out" then
 				return EmptyState {
-					icon = "palette",
+					art = tile(),
 					size = "sm",
 					fill = true,
 					title = zeron.t("signin.title"),
@@ -622,7 +694,7 @@ zeron.tab(KIND, function(tab: any): Node
 				return error_page(string.sub(which, 6), designs)
 			elseif which == "empty" then
 				return EmptyState {
-					icon = "palette",
+					art = tile(),
 					size = "sm",
 					fill = true,
 					title = zeron.t("empty.title"),

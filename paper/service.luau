@@ -1,40 +1,14 @@
 --!strict
--- Paper's cloud MCP server (mcp.paper.design) for every agent, from one
--- place: this service holds the one Paper sign-in on its device and passes
--- MCP's tools/list and tools/call through unchanged.
---
--- Sign-in is OAuth's device flow, as fits a server with no browser: the
--- service registers itself with login.paper.design once, asks for a code,
--- and the person approves it at login.paper.design/device. Paper's access
--- tokens last minutes and each refresh token works once, so refreshing runs
--- one at a time, here only.
+-- Paper for the chat's panel. Agents reach Paper through its own MCP server
+-- (mcp.paper.design), set up in each agent harness on the device with its own
+-- sign-in, so Paper works the same inside Zeron and out. This service only
+-- reads where each harness stands with Paper, and keeps the checkout's
+-- paper.json: the designs it lists and the ones New design links.
 
 local zeron = require("./zeron")("paper")
 
 local MCP = "https://mcp.paper.design/"
-local LOGIN = "https://login.paper.design"
--- The resource tokens are for (RFC 8707): asked for on every token request,
--- or Paper's login hands back a token for the client alone, which the MCP
--- server refuses.
-local RESOURCE = "https://mcp.paper.design"
-local PROTOCOL = "2025-06-18"
-local VERSION = "0.1.3"
-
-local auth = zeron.store("auth", {} :: any)
-
-type Pending = { device_code: string, code: string, url: string, expires: number, interval: number }
-local pending: Pending? = nil
-
-local function form(t: { [string]: string }): string
-	local parts = {}
-	for k, v in t do
-		local e = string.gsub(v, "[^%w%-%._~]", function(c: string): string
-			return string.format("%%%02X", string.byte(c))
-		end)
-		table.insert(parts, `{k}={e}`)
-	end
-	return table.concat(parts, "&")
-end
+local VERSION = "0.2.0"
 
 local function decode(body: string?): any
 	if type(body) ~= "string" or body == "" then
@@ -44,368 +18,136 @@ local function decode(body: string?): any
 	return if ok then v else nil
 end
 
-local function header(h: any, name: string): string?
-	if type(h) ~= "table" then
-		return nil
-	end
-	for k, v in h do
-		if string.lower(tostring(k)) == name then
-			return if type(v) == "table" then tostring(v[1]) else tostring(v)
-		end
-	end
-	return nil
-end
-
-local function post_form(path: string, fields: { [string]: string }): (number, any)
-	local r = zeron.fetch(LOGIN .. path, {
-		method = "POST",
-		headers = { ["content-type"] = "application/x-www-form-urlencoded", accept = "application/json" },
-		body = form(fields),
-		timeout = 30,
-	}):await()
-	return r.status, decode(r.body)
-end
-
--- This service's OAuth client at Paper, registered once.
-local function client_id(): string
-	local a = auth:get()
-	if type(a.client_id) == "string" then
-		return a.client_id
-	end
-	local r = zeron.fetch(LOGIN .. "/oauth2/register", {
-		method = "POST",
-		headers = { ["content-type"] = "application/json", accept = "application/json" },
-		body = zeron.json.encode({
-			client_name = "Zeron Paper",
-			grant_types = { "urn:ietf:params:oauth:grant-type:device_code", "refresh_token", "authorization_code" },
-			redirect_uris = { "http://127.0.0.1/callback" },
-			response_types = { "code" },
-			token_endpoint_auth_method = "none",
-		}),
-		timeout = 30,
-	}):await()
-	local d = decode(r.body)
-	if r.status >= 300 or type(d) ~= "table" or type(d.client_id) ~= "string" then
-		error(`Paper refused to register Zeron (HTTP {r.status})`, 0)
-	end
-	auth:set({ client_id = d.client_id })
-	return d.client_id
-end
-
-local function keep(d: any)
-	local a = auth:get()
-	auth:set({
-		client_id = a.client_id,
-		access = d.access_token,
-		-- Paper may hand back a new refresh token, or keep the old one.
-		refresh = d.refresh_token or a.refresh,
-		expires = os.time() + (tonumber(d.expires_in) or 300),
-	})
-end
-
-local function signed_out()
-	local a = auth:get()
-	auth:set({ client_id = a.client_id })
-end
-
--- One try at the device code: true once signed in.
-local function poll_once(): boolean
-	local p = pending
-	if not p then
-		return false
-	end
-	if os.time() >= p.expires then
-		pending = nil
-		return false
-	end
-	local status, d = post_form("/oauth2/token", {
-		grant_type = "urn:ietf:params:oauth:grant-type:device_code",
-		device_code = p.device_code,
-		client_id = client_id(),
-		resource = RESOURCE,
-	})
-	if status < 300 and type(d) == "table" and d.access_token then
-		keep(d)
-		if pending == p then
-			pending = nil
-		end
-		print("signed in to Paper")
-		return true
-	end
-	local why = if type(d) == "table" then d.error else nil
-	if why == "slow_down" then
-		p.interval += 5
-	elseif why ~= "authorization_pending" then
-		if pending == p then
-			pending = nil
-		end
-	end
-	return false
-end
-
--- A sign-in code for the person, the one already waiting when there is one.
-local function start_signin(): Pending
-	local p = pending
-	if p and os.time() < p.expires - 15 then
-		return p
-	end
-	local status, d = post_form("/oauth2/device_authorization", {
-		client_id = client_id(),
-		scope = "openid offline_access",
-		resource = RESOURCE,
-	})
-	if status >= 300 or type(d) ~= "table" or type(d.device_code) ~= "string" then
-		error(`Paper didn't give a sign-in code (HTTP {status})`, 0)
-	end
-	local fresh: Pending = {
-		device_code = d.device_code,
-		code = d.user_code,
-		url = d.verification_uri_complete or d.verification_uri,
-		expires = os.time() + (tonumber(d.expires_in) or 300),
-		interval = tonumber(d.interval) or 5,
-	}
-	pending = fresh
-	zeron.task(function()
-		while pending == fresh and os.time() < fresh.expires do
-			zeron.sleep(fresh.interval):await()
-			if pending ~= fresh then
-				return
-			end
-			local ok, done = pcall(poll_once)
-			if ok and done then
-				return
-			end
-		end
+-- A program, run as the person; nil when it can't be run here (not
+-- installed, or not on the PATH Zeron runs programs with).
+local function run(program: string, args: { string }): any
+	local ok, r = pcall(function()
+		return zeron.run(program, args, { timeout = 30 }):await()
 	end)
-	return fresh
-end
-
-local refreshing = false
-
--- A live access token, refreshed when it's about to end. nil: not signed in.
-local function token(force: boolean?): string?
-	local waited = 0
-	while refreshing and waited < 30 do
-		zeron.sleep(0.1):await()
-		waited += 0.1
-	end
-	local a = auth:get()
-	if not force and type(a.access) == "string" and (a.expires or 0) - 30 > os.time() then
-		return a.access
-	end
-	if type(a.refresh) ~= "string" then
-		if pending and poll_once() then
-			return auth:get().access
-		end
+	if not ok or type(r) ~= "table" or r.status == 127 then
 		return nil
 	end
-	refreshing = true
-	local ok, status, d = pcall(post_form, "/oauth2/token", {
-		grant_type = "refresh_token",
-		refresh_token = a.refresh,
-		client_id = a.client_id or client_id(),
-		resource = RESOURCE,
-	})
-	refreshing = false
-	if not ok then
-		error(`Paper's sign-in server didn't answer: {status}`, 0)
-	end
-	if status < 300 and type(d) == "table" and d.access_token then
-		keep(d)
-		return d.access_token
-	end
-	local why = if type(d) == "table" then d.error else nil
-	if why == "invalid_grant" or why == "invalid_client" or status == 401 then
-		print(`Paper sign-in ended: {why or status}`)
-		signed_out()
-		return nil
-	end
-	error(`Paper's sign-in server answered HTTP {status}`, 0)
+	return r
 end
 
-local function not_signed_in()
-	local p = start_signin()
-	error(
-		`Paper isn't signed in on this device. Ask the person to open {p.url} and approve code {p.code}, then call again.`,
-		0
-	)
-end
-
--- The MCP session with Paper: its id and the instructions Paper gave.
-local session: { id: string?, instructions: any }? = nil
-local next_id = 0
-
--- One JSON-RPC message out of a reply that may be JSON or an event stream.
-local function reply_of(r: any, id: number?): any
-	local kind = header(r.headers, "content-type") or ""
-	if string.find(kind, "text/event-stream", 1, true) then
-		local found = nil
-		for event in string.gmatch((r.body or "") .. "\n\n", "(.-)\r?\n\r?\n") do
-			local data = {}
-			for line in string.gmatch(event, "[^\r\n]+") do
-				local v = string.match(line, "^data: ?(.*)$")
-				if v then
-					table.insert(data, v)
-				end
-			end
-			local m = decode(table.concat(data, "\n"))
-			if type(m) == "table" and (id == nil or m.id == id) and (m.result ~= nil or m.error ~= nil) then
-				found = m
-			end
-		end
-		return found
-	end
-	return decode(r.body)
-end
-
--- A JSON-RPC message, written out here so an empty object stays `{}`
--- (a Lua table can't say whether it's an object or a list).
-local function message(id: number?, method: string, params: string?): string
-	local idp = if id then `"id":{id},` else ""
-	local pp = if params then `,"params":{params}` else ""
-	return `\{"jsonrpc":"2.0",{idp}"method":{zeron.json.encode(method)}{pp}\}`
-end
-
--- A table as a JSON object: `{}` when it's empty.
-local function object(t: any): string
-	if type(t) ~= "table" or next(t) == nil then
-		return "{}"
-	end
-	return zeron.json.encode(t)
-end
-
-local function send(bearer: string, body: string, sid: string?): any
-	local headers: { [string]: string } = {
-		authorization = "Bearer " .. bearer,
-		["content-type"] = "application/json",
-		accept = "application/json, text/event-stream",
-		["mcp-protocol-version"] = PROTOCOL,
-	}
-	if sid then
-		headers["mcp-session-id"] = sid
-	end
-	return zeron.fetch(MCP, { method = "POST", headers = headers, body = body, timeout = 120 }):await()
-end
-
-local function open(bearer: string): (number, any)
-	next_id += 1
-	local id = next_id
-	local client = zeron.json.encode({ name = "zeron-paper", version = VERSION })
-	local r = send(bearer, message(id, "initialize", `\{"protocolVersion":"{PROTOCOL}","capabilities":\{\},"clientInfo":{client}\}`))
-	if r.status >= 300 then
-		return r.status, nil
-	end
-	local m = reply_of(r, id)
-	local sid = header(r.headers, "mcp-session-id")
-	session = { id = sid, instructions = if type(m) == "table" and m.result then m.result.instructions else nil }
-	send(bearer, message(nil, "notifications/initialized"), sid)
-	return r.status, session
-end
-
--- A request to Paper's server: its result, or an error saying why not.
-local function rpc(method: string, params: string?): any
-	local tries = 0
-	local force = false
-	while true do
-		tries += 1
-		local bearer = token(force)
-		if not bearer then
-			not_signed_in()
-			return nil
-		end
-		local status = 200
-		if not session then
-			status = open(bearer)
-		end
-		if session then
-			next_id += 1
-			local id = next_id
-			local r = send(bearer, message(id, method, params), session.id)
-			status = r.status
-			if status < 300 then
-				local m = reply_of(r, id)
-				if type(m) ~= "table" then
-					error(`Paper's server gave no answer to {method}`, 0)
-				end
-				if m.error then
-					error(`Paper: {m.error.message or zeron.json.encode(m.error)}`, 0)
-				end
-				return m.result
-			end
-		end
-		-- Signed out by Paper: refresh once. An ended session: start anew once.
-		if tries >= 3 then
-			error(`Paper's server answered HTTP {status}`, 0)
-		end
-		if status == 401 then
-			session = nil
-			force = true
-		elseif status == 404 or status == 400 then
-			session = nil
-			force = false
-		else
-			error(`Paper's server answered HTTP {status}`, 0)
-		end
-	end
-end
-
-zeron.tool {
-	name = "paper_tools_list",
-	run = function(_args: any)
-		local tools = {}
-		local cursor: string? = nil
-		repeat
-			local result = rpc("tools/list", if cursor then `\{"cursor":{zeron.json.encode(cursor)}\}` else nil)
-			for _, t in (result and result.tools) or {} do
-				table.insert(tools, t)
-			end
-			cursor = result and result.nextCursor
-		until not cursor
-		return {
-			instructions = session and session.instructions,
-			tools = tools,
-		}
-	end,
+-- Each harness: how it says where Paper stands ("in" signed in, "out" set up
+-- but not signed in, "missing" not set up, "error" set up and failing), and
+-- the commands that set it up and sign in.
+type Harness = {
+	id: string,
+	name: string,
+	mark: string,
+	check: () -> ...any,
+	setup: string,
+	login: string,
 }
 
-zeron.tool {
-	name = "paper_tools_call",
-	run = function(args: any)
-		if type(args) ~= "table" or type(args.name) ~= "string" or args.name == "" then
-			error("name is required: a tool name from paper_tools_list", 0)
-		end
-		return rpc("tools/call", `\{"name":{zeron.json.encode(args.name)},"arguments":{object(args.arguments)}\}`)
-	end,
+local HARNESSES: { Harness } = {
+	{
+		id = "claude",
+		name = "Claude Code",
+		mark = "claude",
+		check = function()
+			local r = run("claude", { "mcp", "get", "paper" })
+			if not r then
+				return nil
+			end
+			local out = (r.stdout or "") .. (r.stderr or "")
+			if r.status ~= 0 then
+				return if string.find(out, "No MCP server", 1, true) then "missing" else "error", out
+			end
+			if string.find(out, "Connected", 1, true) then
+				return "in"
+			elseif string.find(out, "authenticat", 1, true) then
+				return "out"
+			end
+			return "error", string.match(out, "Status:%s*([^\n]+)")
+		end,
+		setup = `claude mcp add --transport http --scope user paper {MCP} && claude mcp login paper`,
+		login = "claude mcp login paper",
+	},
+	{
+		id = "codex",
+		name = "Codex",
+		mark = "openai",
+		check = function()
+			local r = run("codex", { "mcp", "list", "--json" })
+			if not r then
+				return nil
+			end
+			local list = decode(r.stdout)
+			if type(list) ~= "table" then
+				return "error", r.stderr
+			end
+			for _, s in list do
+				if type(s) == "table" and s.name == "paper" then
+					if s.enabled == false then
+						return "error", s.disabled_reason or "turned off"
+					elseif s.auth_status == "not_logged_in" then
+						return "out"
+					end
+					return "in"
+				end
+			end
+			return "missing"
+		end,
+		-- (Codex signs in as it adds a server.)
+		setup = `codex mcp add paper --url {MCP}`,
+		login = "codex mcp login paper",
+	},
+	{
+		id = "pi",
+		name = "Pi",
+		mark = "pi",
+		check = function()
+			-- (Pi exits 1 when any server fails; what it prints still says.)
+			local r = run("pi", { "mcp", "list", "--json" })
+			if not r then
+				return nil
+			end
+			local d = decode(r.stdout)
+			if type(d) ~= "table" or type(d.servers) ~= "table" then
+				return "error", r.stderr
+			end
+			for _, s in d.servers do
+				if type(s) == "table" and s.name == "paper" then
+					if s.state == "needs-auth" then
+						return "out"
+					elseif s.enabled == false then
+						return "error", "turned off"
+					elseif type(s.tools) == "table" and #s.tools > 0 then
+						return "in"
+					end
+					return "error", if type(s.error) == "string" then s.error else s.state
+				end
+			end
+			return "missing"
+		end,
+		setup = `pi mcp add paper --url {MCP} && pi mcp login paper`,
+		login = "pi mcp login paper",
+	},
 }
 
--- For the Paper tab: whether agents here are signed in, and a code when not.
-zeron.serve("status", function()
-	local a = auth:get()
-	local p = pending
-	return {
-		signed_in = type(a.refresh) == "string" or (type(a.access) == "string" and (a.expires or 0) > os.time()),
-		code = p and p.code,
-		url = p and p.url,
-	}
+-- For the Paper tab: each harness on this device and where it stands with
+-- Paper, with the command that gets it the rest of the way. A harness that
+-- isn't installed here isn't listed.
+zeron.serve("agents", function()
+	local out = {}
+	for _, h in HARNESSES do
+		local state, why = h.check()
+		if state then
+			table.insert(out, {
+				id = h.id,
+				name = h.name,
+				mark = h.mark,
+				state = state,
+				why = if type(why) == "string" and why ~= "" then string.sub(why, 1, 200) else nil,
+				command = if state == "missing" then h.setup elseif state == "in" then nil else h.login,
+			})
+		end
+	end
+	return { agents = out, version = VERSION }
 end, { safe = true })
-
-zeron.serve("signin", function()
-	local p = start_signin()
-	return { code = p.code, url = p.url }
-end)
-
-zeron.serve("cancel", function()
-	pending = nil
-	local a = auth:get()
-	return { signed_in = type(a.refresh) == "string" }
-end)
-
-zeron.serve("signout", function()
-	session = nil
-	pending = nil
-	signed_out()
-	return { signed_in = false }
-end)
 
 -- A Paper file's link as paper.json keeps it: the file's address alone
 -- (no page, no query). nil: not a Paper file.

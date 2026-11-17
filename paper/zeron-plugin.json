@@ -1,73 +1,38 @@
 {
   "id": "paper",
   "name": "Paper",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "icon": "icon.svg",
-  "description": "Paper designs for every agent, live on the chat's panel.",
+  "description": "Paper designs live on the chat's panel, and where each agent stands with Paper's MCP.",
   "entry": "init.luau",
   "service": "service.luau",
   "permissions": [
-    "tools",
     "service",
-    "network",
     "ui.add",
     "panel.tabs",
     "web",
     "sessions.read",
     "files.read",
     "commands",
-    "links.open"
+    "clipboard"
   ],
   "commands": [
     "cat",
-    "tee"
-  ],
-  "network": {
-    "hosts": [
-      "mcp.paper.design",
-      "login.paper.design"
-    ]
-  },
-  "tools": [
-    {
-      "name": "paper_tools_list",
-      "description": "List Paper's design tools (MCP tools/list from Paper's server) with their input schemas and Paper's instructions. Call once before using Paper. A project's Paper files are linked in paper.json at its root.",
-      "input": {
-        "type": "object",
-        "properties": {}
-      }
-    },
-    {
-      "name": "paper_tools_call",
-      "description": "Call one of Paper's tools by name (tools/call). Arguments go to Paper unchanged; Paper's result comes back unchanged.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "A tool name from paper_tools_list."
-          },
-          "arguments": {
-            "type": "object",
-            "description": "That tool's arguments, as its input schema says."
-          }
-        },
-        "required": [
-          "name"
-        ]
-      }
-    }
+    "tee",
+    "claude",
+    "codex",
+    "pi"
   ],
   "signature": {
     "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
     "files": {
-      "README.md": "43f5c9f65f477b826c3bfd31fb4dc5442218d1b62a12f342dec37f48867dd1f4",
+      "README.md": "55ed52545f9db60affafdc8d5adef17cb8842ac8e013c2064835f958c6da1970",
       "icon.svg": "b17150cb15572da86c535ede9fc3513b5f1001cdb3b3f2a13238ca9a25a110a3",
-      "init.luau": "bc23a92dd2fe0cd57e2f16c212371ef1d2c294a5d268d69a595d6bc56ea06a6e",
-      "locales/en.json": "9c7996f4c262ad326cb88ea83bbecff0ad2761752d8b619b7107ce9a7ea7365c",
-      "service.luau": "fcaba215e87b8cc4d75dbfff1713f77e03969c41b70916c0d1ccbe7c8c896ade",
+      "init.luau": "c0f01b1c4ee8baea06ca8cf1647ea59c32d26b077f66fe590ad1756656c9c5b4",
+      "locales/en.json": "936ff5c7c403520efe96f124f1011b0e338f16c7af14df6bb32900a3436df906",
+      "service.luau": "7c3f17a0ef39080d883422e575f8051a23f488aedd4f66f0f5077b7f3e39154d",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "wZFxkN2IUYnU8tjjFllDnp0QQ3OSuRNNyL5r-OZrdvedbYps7P2ChVuSUYoNy79rRSkkf6Njls9R597R1MqbCA"
+    "sig": "OpTp1iwN4LEHhQJMwOoA8CRBseIi8dC_35mit1SlFfTwWfZsBB8tr4DvtxnzCuUcVMY96Sd5kM9F1SC9s-XEDg"
   }
 }

@@ -153,15 +153,307 @@ zeron.place {
 }
 
 -- The tab's page, with a cookie profile of its own when Zeron's web views
--- give plugins one (Paper's sign-in kept apart and between runs).
+-- give plugins one (Paper's sign-in kept apart and between runs), and the
+-- page able to tell the tab things (`window.zgx.postMessage`), which copy
+-- and paste go through.
 local function page(id: string): any
 	local ok, web = pcall(function()
-		return (ui :: any).web(id, { profile = "paper" })
+		return (ui :: any).web(id, { profile = "paper", messages = true })
 	end)
 	if ok and web then
 		return web
 	end
-	return (ui :: any).web(id)
+	return (ui :: any).web(id, { messages = true })
+end
+
+-- Copy and paste. Zeron's web view doesn't give a page this device's
+-- clipboard (on macOS the page hears Cmd+C and Cmd+V, and nothing is
+-- copied or pasted), so the page hands both keys to the tab:
+--
+-- - Copy and cut run WebKit's own command, so Paper's handler fills the
+--   clipboard with all it gives (its nodes as HTML too). Its text is sent
+--   here as well, and put on the clipboard where it didn't arrive.
+-- - Paste asks the tab what the clipboard holds. Text comes back and goes in
+--   as Paper's own paste event (with the HTML of the page's last copy when
+--   it's that same text, so copied nodes paste as nodes). A picture can't be
+--   handed over as data, so for one the page asks WebKit to paste it.
+-- - Paper's menus (Paste, Copy link, Copy as code) use the Clipboard API,
+--   which goes the same way.
+--
+-- Only Paper's own pages (the main frame) are answered, and only while
+-- Zeron's window is in front.
+local CLIP_JS = [==[
+(() => {
+  if (window.__zeronPaperClip || !window.zgx) return;
+  const send = (m) => {
+    try { window.zgx.postMessage(Object.assign({ kind: 'paper-clip' }, m)); } catch (x) {}
+  };
+  const mac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '');
+  const norm = (s) => String(s == null ? '' : s).replace(/\r\n?/g, '\n');
+  const now = () => (window.performance ? performance.now() : Date.now());
+
+  // What this page last copied, with Paper's HTML (its nodes): the device's
+  // clipboard gives back the text alone, so a paste of that same text gets
+  // the HTML again.
+  let own = null;
+  const remember = (text, html) => { own = html ? { text: norm(text), html } : null; };
+
+  // Asking Zeron what the device's clipboard holds: { text, image }.
+  let seq = 0;
+  const waiting = new Map();
+  const ask = (done) => {
+    const id = ++seq;
+    const timer = setTimeout(() => { if (waiting.delete(id)) done(null); }, 3000);
+    waiting.set(id, (a) => { clearTimeout(timer); done(a); });
+    send({ op: 'read', id });
+  };
+
+  const focused = () => {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+    return el && el !== document.documentElement ? el : (document.body || document.documentElement);
+  };
+  const editable = (el) => !!el && (el.isContentEditable || el.tagName === 'TEXTAREA' ||
+    (el.tagName === 'INPUT' && /^(text|search|url|tel|email|password|number|)$/i.test(el.getAttribute('type') || '')));
+  const selected = () => {
+    const el = focused();
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+      try { return el.value.slice(el.selectionStart, el.selectionEnd); } catch (x) { return ''; }
+    }
+    return String(window.getSelection() || '');
+  };
+
+  // Copy and cut: WebKit's own command first, so Paper's handler fills the
+  // clipboard with everything it gives (its HTML too). What it put there is
+  // noted as it's set; where the command is refused, the copy runs into a
+  // transfer of the tab's own and its text goes to the device's clipboard.
+  let recording = null;
+  const hook = (e) => {
+    const got = recording;
+    const d = e.clipboardData;
+    if (!got || !d) return;
+    const set = d.setData;
+    try {
+      d.setData = function (type, value) {
+        let t = String(type).toLowerCase();
+        if (t === 'text') t = 'text/plain';
+        got[t] = String(value);
+        return set.call(d, type, value);
+      };
+    } catch (x) {}
+  };
+  addEventListener('copy', hook, true);
+  addEventListener('cut', hook, true);
+
+  const copy = (cut) => {
+    const el = focused();
+    const sel = selected();
+    const got = {};
+    recording = got;
+    let ok = false;
+    try { ok = document.execCommand(cut ? 'cut' : 'copy'); } catch (x) {}
+    recording = null;
+    let text = got['text/plain'];
+    let html = got['text/html'];
+    if (!ok) {
+      let taken = false;
+      try {
+        const data = new DataTransfer();
+        const ev = new ClipboardEvent(cut ? 'cut' : 'copy', { clipboardData: data, bubbles: true, cancelable: true, composed: true });
+        el.dispatchEvent(ev);
+        taken = ev.defaultPrevented;
+        text = data.getData('text/plain');
+        html = data.getData('text/html');
+      } catch (x) {}
+      if (!taken) {
+        text = sel;
+        html = '';
+        if (cut && sel && editable(el)) document.execCommand('delete');
+      }
+    } else if (text == null && html == null) {
+      text = sel;
+    }
+    remember(text, html);
+    if (text) send({ op: 'copied', text: String(text) });
+  };
+
+  // Paste: Paper's own paste event, carrying what the device's clipboard
+  // holds. Text comes from Zeron; a picture only WebKit can read, so for one
+  // the page's own paste is asked for (WebKit's, then the Clipboard API's).
+  let pasting = false;
+  let trusted = -1e9;
+  let pending = 0;
+  addEventListener('paste', (e) => {
+    if (e.isTrusted && !pasting) { trusted = now(); pending = 0; }
+  }, true);
+
+  const give = (el, text, html, files) => {
+    let taken = false;
+    try {
+      const data = new DataTransfer();
+      if (text) data.setData('text/plain', text);
+      if (html) data.setData('text/html', html);
+      for (const f of files || []) data.items.add(f);
+      const ev = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true, composed: true });
+      el.dispatchEvent(ev);
+      taken = ev.defaultPrevented;
+    } catch (x) {}
+    if (!taken && text && editable(el)) document.execCommand('insertText', false, text);
+  };
+
+  const original = {};
+  const cb = navigator.clipboard;
+  if (cb) {
+    for (const k of ['read', 'readText', 'write', 'writeText']) if (typeof cb[k] === 'function') original[k] = cb[k].bind(cb);
+  }
+
+  const native = (el, text) => {
+    let ok = false;
+    pasting = true;
+    try { ok = document.execCommand('paste'); } catch (x) {}
+    pasting = false;
+    if (ok) return;
+    if (!original.read) { if (text) give(el, text, null, []); return; }
+    original.read().then(async (items) => {
+      let t = null, h = null;
+      const files = [];
+      for (const item of items || []) {
+        for (const type of item.types || []) {
+          const blob = await item.getType(type);
+          if (type === 'text/plain' && t == null) t = await blob.text();
+          else if (type === 'text/html' && h == null) h = await blob.text();
+          else if (type.startsWith('image/')) files.push(new File([blob], 'image.' + (type === 'image/svg+xml' ? 'svg' : type.split('/')[1]), { type }));
+        }
+      }
+      give(el, t != null ? t : text, h, files);
+    }).catch(() => { if (text) give(el, text, null, []); });
+  };
+
+  const paste = () => {
+    if (now() - trusted < 200) return;
+    const el = focused();
+    const mine = ++pending;
+    ask((a) => {
+      if (pending !== mine) return;
+      pending = 0;
+      const text = a && typeof a.text === 'string' && a.text !== '' ? a.text : null;
+      if (a && a.image) return native(el, text);
+      if (text != null) return give(el, text, own && own.text === norm(text) ? own.html : null, []);
+      native(el, null);
+    });
+  };
+
+  addEventListener('keydown', (e) => {
+    const mod = mac ? (e.metaKey && !e.ctrlKey) : (e.ctrlKey && !e.metaKey);
+    if (!mod || e.altKey || e.shiftKey || e.isComposing) return;
+    const key = /^[a-z]$/i.test(e.key || '') ? e.key.toLowerCase() : ({ KeyC: 'c', KeyX: 'x', KeyV: 'v' })[e.code];
+    if (key !== 'c' && key !== 'x' && key !== 'v') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.repeat) return;
+    if (key === 'v') paste(); else copy(key === 'x');
+  }, true);
+
+  // Paper's menus (Paste, Paste over, Copy link, Copy as code) use the
+  // Clipboard API: reads come from Zeron as a paste does, and what's written
+  // reaches the device's clipboard even where WebKit refuses it.
+  const items = (a) => {
+    const text = a && typeof a.text === 'string' ? a.text : '';
+    const parts = { 'text/plain': new Blob([text], { type: 'text/plain' }) };
+    if (own && own.text === norm(text)) parts['text/html'] = new Blob([own.html], { type: 'text/html' });
+    return [new ClipboardItem(parts)];
+  };
+  const wrote = async (list) => {
+    let text = null, html = null;
+    for (const item of list || []) {
+      for (const type of item.types || []) {
+        if (type === 'text/plain' && text == null) text = await (await item.getType(type)).text();
+        if (type === 'text/html' && html == null) html = await (await item.getType(type)).text();
+      }
+    }
+    remember(text, html);
+    if (text) send({ op: 'copied', text });
+  };
+  const define = (k, fn) => { try { Object.defineProperty(cb, k, { value: fn, configurable: true, writable: true }); } catch (x) {} };
+  if (cb) {
+    define('read', () => new Promise((resolve, reject) => ask((a) => {
+      if (a && a.image && original.read) return original.read().then(resolve, reject);
+      if (!a && original.read) return original.read().then(resolve, reject);
+      resolve(items(a));
+    })));
+    define('readText', () => new Promise((resolve, reject) => ask((a) => {
+      if (a && typeof a.text === 'string') return resolve(a.text);
+      if (original.readText) return original.readText().then(resolve, reject);
+      resolve('');
+    })));
+    define('write', async (list) => {
+      try { if (original.write) await original.write(list); } catch (x) {}
+      await wrote(list);
+    });
+    define('writeText', async (text) => {
+      try { if (original.writeText) await original.writeText(text); } catch (x) {}
+      remember(text, null);
+      if (text) send({ op: 'copied', text: String(text) });
+    });
+  }
+
+  window.__zeronPaperClip = {
+    answer: (id, a) => {
+      const done = waiting.get(id);
+      if (!done) return;
+      waiting.delete(id);
+      done(a);
+    },
+  };
+})();
+]==]
+local CLIP_ORIGINS = { ["https://app.paper.design"] = true, ["https://login.paper.design"] = true }
+
+local function js_value(v: any): string
+	local ok, lit = pcall(ui.json.encode, v)
+	if ok and type(lit) == "string" then
+		return (string.gsub(string.gsub(lit, "\226\128\168", "\\u2028"), "\226\128\169", "\\u2029"))
+	end
+	return "null"
+end
+
+local function lines(s: string): string
+	return (string.gsub(s, "\r\n?", "\n"))
+end
+
+local function clipboard(web: any, value: any, origin: string, main_frame: boolean)
+	if not main_frame or type(value) ~= "table" or value.kind ~= "paper-clip" or not CLIP_ORIGINS[origin] then
+		return
+	end
+	local active = zeron.window(true).active
+	if value.op == "copied" and type(value.text) == "string" and value.text ~= "" and active then
+		-- Written only where WebKit's copy didn't arrive, so its HTML stays.
+		local ok, held = pcall(ui.clipboard.read)
+		if not ok or type(held) ~= "string" or lines(held) ~= lines(value.text) then
+			pcall(ui.clipboard.write, value.text)
+		end
+	elseif value.op == "read" and type(value.id) == "number" then
+		local id = math.floor(value.id)
+		local function answer(a: any)
+			web:run(`window.__zeronPaperClip && window.__zeronPaperClip.answer({id}, {js_value(a)});`)
+		end
+		if not active then
+			answer(nil)
+			return
+		end
+		local ok, text = pcall(ui.clipboard.read)
+		local said = if ok and type(text) == "string" then text else nil
+		local got, picture = pcall(ui.clipboard.read_image)
+		if got and picture then
+			picture:after(function(image: any)
+				answer({ text = said, image = image ~= nil })
+			end, function()
+				answer({ text = said, image = false })
+			end)
+		else
+			answer({ text = said, image = false })
+		end
+	end
 end
 
 -- Work going on: a ring alone, centred (its words for screen readers only).
@@ -284,12 +576,21 @@ local function design(v: Viewer, label: string, key: string): Node
 			w_full = true,
 			grow = 1,
 			min_h = 0,
+			on_message = function(value: any, origin: string, main_frame: boolean)
+				clipboard(web, value, origin, main_frame)
+			end,
 			on_navigate = function(e: any)
 				if type(e) == "table" and (e.kind == "committed" or e.kind == "finished" or e.kind == "failed") then
 					shown:set("page")
 				end
-				if type(e) == "table" and e.kind == "finished" and type(web.url) == "string" and string.match(web.url, "^https://app%.paper%.design/file/") then
-					web:run(SIGNED_IN)
+				local url = web.url
+				if type(e) == "table" and e.kind == "finished" and type(url) == "string" then
+					if string.match(url, "^https://app%.paper%.design/") or string.match(url, "^https://login%.paper%.design/") then
+						web:run(CLIP_JS)
+					end
+					if string.match(url, "^https://app%.paper%.design/file/") then
+						web:run(SIGNED_IN)
+					end
 				end
 			end,
 		},

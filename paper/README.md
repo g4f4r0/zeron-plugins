@@ -27,6 +27,17 @@ New design asks Paper for a new file (its `create_file`, through the device's si
 
 Nothing in the tab asks to be reloaded. The list reads `paper.json` again every few seconds, so a design an agent links shows by itself, and a design that can't load, or a device that can't be reached, is tried again until it can.
 
+## Copy and paste
+
+Copy, cut and paste work in the canvas both ways, with the device's clipboard. Zeron's web view doesn't run them for a page by itself, so the plugin adds a small script to Paper's pages (`app.paper.design` and `login.paper.design` only) that does:
+
+- Cmd+C and Cmd+X (Ctrl on Windows and Linux) run the page's own copy, so Paper fills the clipboard as it would in a browser, and the text also goes to the device's clipboard through Zeron.
+- Cmd+V asks Zeron for the device's clipboard and gives it to Paper as its own paste. Paper's nodes copied in the canvas paste back as nodes, text from anywhere pastes as text, and in a text field the text is typed in.
+- An image on the clipboard goes through WebKit's own paste, which on macOS may show a Paste button to press once. If the image can't be read, any text with it still pastes.
+- Paper's menus (Paste, Copy link, Copy as code) use the same path.
+
+The page gets the clipboard only while Zeron's window is in front, and only Paper's own pages, in the main frame, can ask for it.
+
 ## How it works
 
 - `service.luau` runs on each device where the plugin is allowed. It holds that device's Paper sign-in and answers both tools, even with no window open.
@@ -44,6 +55,7 @@ The plugin asks for these:
 - `ui.add`, `panel.tabs` and `web`, for the panel and the canvas.
 - `links.open`, unused since 0.4.3 (sign-in now shows in the tab), kept so updating doesn't ask to allow Paper again.
 - `sessions.read`, `files.read` and `commands`, limited to `cat` and `tee`, for reading and writing `paper.json`. Only the chat's `paper.json` is written, and only when New design links a file.
+- `clipboard`, for copy and paste in the canvas.
 - `commands` also allows `openssl`, which writes Paper's images to files (`openssl base64 -d -A -out <file>`, the base64 on stdin).
 
 ## Sign-in per device

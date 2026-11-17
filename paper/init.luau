@@ -6,8 +6,9 @@
 -- The panel's empty page gets one Paper row (key P), as Desktop's. Its tab
 -- first asks whether agents on the chat's device are signed in to Paper:
 -- while they aren't, it says so as an empty page with Sign in. Sign in
--- opens Paper's approval page where links open (Settings → Links), and the
--- tab shows the code until it's approved. Signed in, it lists the designs the
+-- shows Paper's approval page in the tab itself, so the one login there
+-- signs in both agents and the canvas (Paper's site, in the same cookies).
+-- Signed in, it lists the designs the
 -- checkout links in its paper.json, drawn as the panel's home draws rows,
 -- and New design, which makes a file in Paper and links it. A design opens
 -- live in the same tab, in place of the list, with Paper's panels folded
@@ -21,7 +22,6 @@
 local zeron = require("./zeron")("paper")
 local PanelHome = require("@ds/panel_home")
 local EmptyState = require("@ds/empty_state")
-local Button = require("@ds/button")
 
 local KIND = "canvas"
 local HOME = "https://app.paper.design/"
@@ -218,7 +218,7 @@ end
 -- A tab's page for designs: the web page, whether it has shown yet, and
 -- loads tried again by themselves every few seconds while they fail. Made
 -- at the top of a tab's build (it holds state).
-type Viewer = { web: any, shown: any, open: (url: string) -> (), trouble: () -> boolean }
+type Viewer = { web: any, shown: any, open: (url: string) -> (), go: (url: string) -> (), trouble: () -> boolean }
 local function viewer(key: string): Viewer
 	local web = page(key)
 	local shown = ui.use_state(if type(web.url) == "string" and web.url ~= "" then "page" else "loading")
@@ -233,20 +233,40 @@ local function viewer(key: string): Viewer
 			web:load(if type(u) == "string" and u ~= "" then u else wanted)
 		end
 	end)
+	local function go(u: string)
+		wanted = u
+		if web.url ~= u then
+			shown:set("loading")
+			web:load(u)
+		end
+	end
 	return {
 		web = web,
 		shown = shown,
 		trouble = trouble,
+		go = go,
 		open = function(url: string)
-			local u = minimal(url)
-			wanted = u
-			if web.url ~= u then
-				shown:set("loading")
-				web:load(u)
-			end
+			go(minimal(url))
 		end,
 	}
 end
+
+-- Paper's site keeps its own sign-in, in the page's cookies. Once a design
+-- has loaded, the page asks Paper who's signed in; signed out, it goes
+-- through Paper's sign-in, which comes straight back while Paper's login
+-- (login.paper.design) knows the person, as it does once they've approved
+-- agents' sign-in in this same page. Tried once a load, so a refusal can't
+-- loop.
+local SIGNED_IN = [[
+(function () {
+  if (!/^\/file\//.test(location.pathname) || sessionStorage.getItem("zeronPaperSignIn") === location.href) return;
+  fetch("https://api.paper.design/auth/me", { credentials: "include" }).then(function (r) {
+    if (r.status !== 401) return;
+    sessionStorage.setItem("zeronPaperSignIn", location.href);
+    location.replace("https://api.paper.design/auth/sign-in?final_redirect_uri=" + encodeURIComponent(location.href));
+  }).catch(function () {});
+})();
+]]
 
 -- A design, live: the page alone, a ring while it first loads, and what went
 -- wrong over it while it can't load. Closing the tab is the way back.
@@ -267,6 +287,9 @@ local function design(v: Viewer, label: string, key: string): Node
 			on_navigate = function(e: any)
 				if type(e) == "table" and (e.kind == "committed" or e.kind == "finished" or e.kind == "failed") then
 					shown:set("page")
+				end
+				if type(e) == "table" and e.kind == "finished" and type(web.url) == "string" and string.match(web.url, "^https://app%.paper%.design/file/") then
+					web:run(SIGNED_IN)
 				end
 			end,
 		},
@@ -307,10 +330,14 @@ end
 -- checkout links, each opening in a tab of its own.
 local function designs_tab(data: any): Node
 	local device = data.device
+	-- The tab's page: agents' sign-in is approved in it (so Paper's site,
+	-- in the same cookies, is signed in too), then designs open in it.
+	local v = viewer(`paper-{data.key or "home"}`)
 
 	-- Agents' sign-in on the chat's device: { phase = "checking" | "in" |
 	-- "out" | "asking" | "code" | "error", code?, url?, why? }.
 	local agents = ui.use_state({ phase = "checking" } :: any)
+	local approving: string? = nil
 	local function told(s: any)
 		if type(s) ~= "table" then
 			return
@@ -319,6 +346,12 @@ local function designs_tab(data: any): Node
 			agents:set({ phase = "in" })
 		elseif s.code then
 			agents:set({ phase = "code", code = s.code, url = s.url })
+			-- Its approval page, once a code (it moves on as the person
+			-- signs in, so it isn't loaded again while they do).
+			if type(s.url) == "string" and s.code ~= approving then
+				approving = s.code
+				v.go(s.url)
+			end
 		else
 			agents:set({ phase = "out" })
 		end
@@ -339,17 +372,7 @@ local function designs_tab(data: any): Node
 
 	local function signin()
 		agents:set({ phase = "asking" })
-		zeron.service(device):call("signin", {}):after(function(s: any)
-			told(s)
-			if type(s) == "table" and type(s.url) == "string" then
-				zeron.open_url(s.url)
-			end
-		end, function(err: any)
-			agents:set({ phase = "error", why = why(err) })
-		end)
-	end
-	local function cancel()
-		zeron.service(device):call("cancel", {}):after(told, function(err: any)
+		zeron.service(device):call("signin", {}):after(told, function(err: any)
 			agents:set({ phase = "error", why = why(err) })
 		end)
 	end
@@ -389,7 +412,6 @@ local function designs_tab(data: any): Node
 	end)
 
 	-- A design opens here, in place of the list.
-	local v = viewer(`paper-{data.key or "home"}`)
 	local opened = ui.use_state(nil :: any)
 	local function open_design(f: any)
 		if type(f) ~= "table" or type(f.url) ~= "string" then
@@ -488,80 +510,6 @@ local function designs_tab(data: any): Node
 		}
 	end
 
-	-- A code out: Zeron's empty state's page, its tile a ring, the code under
-	-- its words, as Settings' provider rows show a sign-in's code.
-	local function waiting(): Node
-		return ui.column {
-			id = "paper-signin",
-			items = "center",
-			justify = "center",
-			gap = "$space.3",
-			w_full = true,
-			grow = 1,
-			py = "$space.5",
-			live = "polite",
-			ui.row {
-				w = 36,
-				h = 36,
-				shrink = 0,
-				items = "center",
-				justify = "center",
-				color = "$text.secondary",
-				ring(16, zeron.s("signing_in")),
-			},
-			ui.column {
-				items = "center",
-				gap = "$space.1",
-				max_w = 340,
-				ui.text {
-					zeron.t("signing_in"),
-					align = "center",
-					text_size = "$font.size.md",
-					line_height = "$font.line.md",
-					weight = "$font.weight.medium",
-					color = "$text.primary",
-					wrap = true,
-				},
-				ui.text {
-					zeron.t("code_check"),
-					align = "center",
-					text_size = "$font.size.sm",
-					line_height = "$font.line.sm",
-					color = "$text.secondary",
-					wrap = true,
-				},
-			},
-			ui.text {
-				function(): string
-					return agents:get().code or ""
-				end,
-				id = "paper-code",
-				font = "$font.mono",
-				text_size = "$font.size.lg",
-				weight = "$font.weight.semibold",
-				color = "$text.primary",
-				selectable = true,
-			},
-			ui.row {
-				gap = "$space.2",
-				items = "center",
-				pt = "$space.1",
-				Button {
-					zeron.t("open_page"),
-					tone = "secondary",
-					size = "sm",
-					on_click = function()
-						local u = agents:peek().url
-						if type(u) == "string" then
-							zeron.open_url(u)
-						end
-					end,
-				},
-				Button { zeron.t("cancel"), tone = "ghost", size = "sm", on_click = cancel },
-			},
-		}
-	end
-
 	-- What can't be reached yet, said once; it's tried again by itself.
 	local function error_page(reason: string): Node
 		return EmptyState {
@@ -602,7 +550,7 @@ local function designs_tab(data: any): Node
 			if which == "working" then
 				return working()
 			elseif which == "code" then
-				return waiting()
+				return design(v, zeron.s("signing_in"), data.key or "home")
 			elseif which == "out" then
 				return EmptyState {
 					art = tile(),

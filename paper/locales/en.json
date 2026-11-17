@@ -7,10 +7,7 @@
   },
   "loading": "Loading…",
   "signing_in": "Signing in to Paper",
-  "code_check": "Check this code matches the one on Paper's page, then confirm there.",
   "sign_in": "Sign in",
-  "cancel": "Cancel",
-  "open_page": "Open the page again",
   "failed": {
     "title": "Couldn't load Paper",
     "body": "Trying again by itself."

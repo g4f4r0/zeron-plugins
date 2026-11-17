@@ -18,7 +18,7 @@ local LOGIN = "https://login.paper.design"
 -- server refuses.
 local RESOURCE = "https://mcp.paper.design"
 local PROTOCOL = "2025-06-18"
-local VERSION = "0.4.2"
+local VERSION = "0.4.3"
 
 local auth = zeron.store("auth", {} :: any)
 

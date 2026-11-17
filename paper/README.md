@@ -32,7 +32,7 @@ Nothing in the tab asks to be reloaded. The list reads `paper.json` again every 
 - `service.luau` runs on each device where the plugin is allowed. It holds that device's Paper sign-in and answers both tools, even with no window open.
 - Sign-in uses OAuth's device flow at `login.paper.design`. The service registers itself once as the public client "Zeron Paper". Access tokens last minutes and each refresh token works only once, so the service refreshes one at a time and stores each new token.
 - Paper's MCP is streamable HTTP at `https://mcp.paper.design/`. The service opens a session, keeps its id, and passes requests through. On a 401 it refreshes and retries. On a 404 or 400 it opens a new session. Replies may be JSON or an event stream.
-- When agents aren't signed in, a tool call fails with the link and code to approve. The tab opens on a Sign in page instead of the list. Sign in opens Paper's approval page where Zeron opens links (Settings → Links), usually the default browser, and the tab shows the code with Open the page again and Cancel until it's approved. Then the list shows.
+- When agents aren't signed in, a tool call fails with the link and code to approve, and the tab opens on a Sign in page instead of the list. Sign in shows Paper's approval page in the tab itself, with the code filled in. The person logs in to Paper there and approves, and the list shows.
 - `init.luau` draws the tabs with Zeron's own pieces: the panel home's rows and heading for the list, Zeron's empty state for signed out, no designs and errors, and Zeron's spinning ring while anything loads (with the engine stepping its clock, so it turns). Paper's mark (`icon.svg`) shows in Settings → Plugins and on the panel's Paper row; the tabs themselves use Zeron's palette glyph, since tabs take only Zeron's own glyphs. An open design is the page alone, with no bar, and the offline or failed state over it while it can't load.
 
 ## Permissions
@@ -42,7 +42,7 @@ The plugin asks for these:
 - `network`, limited to `mcp.paper.design` and `login.paper.design`.
 - `tools` and `service`, for the two agent tools.
 - `ui.add`, `panel.tabs` and `web`, for the panel and the canvas.
-- `links.open`, for opening Paper's sign-in page.
+- `links.open`, unused since 0.4.3 (sign-in now shows in the tab), kept so updating doesn't ask to allow Paper again.
 - `sessions.read`, `files.read` and `commands`, limited to `cat` and `tee`, for reading and writing `paper.json`. Only the chat's `paper.json` is written, and only when New design links a file.
 - `commands` also allows `openssl`, which writes Paper's images to files (`openssl base64 -d -A -out <file>`, the base64 on stdin).
 
@@ -50,7 +50,7 @@ The plugin asks for these:
 
 Each device keeps its own sign-in in the service's store, so agents on another device sign in there once.
 
-The canvas is a web page with its own cookies, kept between runs, so Paper's site asks the person to log in once in the panel too. The agents' sign-in is a token for Paper's MCP server alone and can't sign a web page in.
+The canvas is a web page with its own cookies, kept between runs. Approving agents' sign-in in the tab logs that page in to Paper's login too, so the canvas needs no second login: when a design loads signed out, the page goes through Paper's sign-in (`api.paper.design/auth/sign-in`), which comes straight back signed in. It tries that once per load, so a refusal can't loop. A device whose agents were approved in another browser logs in once in the canvas.
 
 ## Outside Zeron
 

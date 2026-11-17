@@ -1,0 +1,70 @@
+{
+  "id": "paper",
+  "name": "Paper",
+  "version": "0.1.0",
+  "description": "Paper designs for every agent, live on the chat's panel.",
+  "entry": "init.luau",
+  "service": "service.luau",
+  "permissions": [
+    "tools",
+    "service",
+    "network",
+    "ui.add",
+    "panel.tabs",
+    "web",
+    "sessions.read",
+    "files.read",
+    "commands"
+  ],
+  "commands": [
+    "cat",
+    "tee"
+  ],
+  "network": {
+    "hosts": [
+      "mcp.paper.design",
+      "login.paper.design"
+    ]
+  },
+  "tools": [
+    {
+      "name": "paper_tools_list",
+      "description": "List Paper's design tools (MCP tools/list from Paper's server) with their input schemas and Paper's instructions. Call once before using Paper. A project's Paper files are linked in paper.json at its root.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "paper_tools_call",
+      "description": "Call one of Paper's tools by name (tools/call). Arguments go to Paper unchanged; Paper's result comes back unchanged.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "A tool name from paper_tools_list."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "That tool's arguments, as its input schema says."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    }
+  ],
+  "signature": {
+    "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
+    "files": {
+      "README.md": "276744e2e0cbb974ac63df0f19a1b45f1a30f6cedce0a8b856f17f5f85376fa0",
+      "init.luau": "e11bf457d06063a4e1ecd22d8132e38b85b8f9b04d1b173472ee24b164b0082b",
+      "locales/en.json": "9c7996f4c262ad326cb88ea83bbecff0ad2761752d8b619b7107ce9a7ea7365c",
+      "service.luau": "3519d948a2f7af4cd87d72e8c2737e552b2b01ef818cf873a03e4b2adcf1ef46",
+      "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
+    },
+    "sig": "DY4-P_QvyTImm6LdCcN0CKWDXIfn5ErxcuH7Qh8KFCfVnX3EwIu1a0a2st222XzDZwO8laqGqB6Tt5RVjpNnBA"
+  }
+}

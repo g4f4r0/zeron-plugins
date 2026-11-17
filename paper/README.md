@@ -1,0 +1,47 @@
+# Paper
+
+[Paper](https://paper.design) in Zeron. The canvas shows live in a chat's panel, and every agent, Pi included, reaches Paper's cloud MCP server through two tools. Executor isn't involved, and Paper's tools aren't added to any prompt.
+
+## Tools
+
+- `paper_tools_list` returns Paper's own `tools/list`, with each tool's input schema and the instructions Paper's server gives.
+- `paper_tools_call` takes `{ name, arguments }`, sends Paper's `tools/call`, and returns Paper's result unchanged, images included.
+
+Paper's tools pass through as they are, so nothing is renamed, dropped or added. An agent lists them once, then calls the ones it needs.
+
+## Linked designs
+
+A project links its Paper files in `paper.json` at its root:
+
+```json
+{
+  "files": [
+    { "name": "Landing page", "url": "https://app.paper.design/file/..." }
+  ]
+}
+```
+
+An empty panel has one Paper row, and P opens it, as D opens Desktop. The Paper tab lists the designs in `paper.json`, and New design under them. A design opens live in the tab, with a back arrow to the list. A worktree without its own `paper.json` uses its project's. Only `https://app.paper.design/` links are shown.
+
+New design opens Paper's home in the tab. The first file you make or open there is added to the checkout's `paper.json` as `https://app.paper.design/file/<id>`, named after its page title. A worktree with no `paper.json` of its own gets one, starting from its project's list. A file already linked isn't added twice, and a `paper.json` that isn't valid JSON is left alone.
+
+## How it works
+
+- `service.luau` runs on each device where the plugin is allowed. It holds that device's Paper sign-in and answers both tools, even with no window open.
+- Sign-in uses OAuth's device flow at `login.paper.design`. The service registers itself once as the public client "Zeron Paper". Access tokens last minutes and each refresh token works only once, so the service refreshes one at a time and stores each new token.
+- Paper's MCP is streamable HTTP at `https://mcp.paper.design/`. The service opens a session, keeps its id, and passes requests through. On a 401 it refreshes and retries. On a 404 or 400 it opens a new session. Replies may be JSON or an event stream.
+- When agents aren't signed in, a tool call fails with the link and code to approve. The tab opens on a Sign in page instead of the list. Sign in shows the code in a bar over Paper's approval page, in the same view where the person is already signed in to Paper, and the list shows once the code is approved.
+- `init.luau` draws the tab with Zeron's own pieces: the panel home's rows and heading for the list, Zeron's empty state for signed out, no designs and errors, and a ring while anything loads. The view follows Zeron's browser tab, with a 40-point bar and the offline or failed state over the page, with Try again and Dismiss.
+
+## Permissions
+
+The plugin asks for these:
+
+- `network`, limited to `mcp.paper.design` and `login.paper.design`.
+- `tools` and `service`, for the two agent tools.
+- `ui.add`, `panel.tabs` and `web`, for the panel and the canvas.
+- `sessions.read`, `files.read` and `commands`, limited to `cat` and `tee`, for reading and writing `paper.json`. Only the chat's `paper.json` is written, and only when New design links a file.
+
+## Sign-in per device
+
+Each device keeps its own sign-in in the service's store, so agents on another device sign in there once. The canvas's web view has its own sign-in to Paper, made by the person in the page.

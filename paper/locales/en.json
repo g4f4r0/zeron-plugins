@@ -1,0 +1,50 @@
+{
+  "row": {
+    "label": "Paper"
+  },
+  "tab": {
+    "home": "Paper"
+  },
+  "loading": "Loading…",
+  "signing_in": "Signing in to Paper",
+  "code_check": "Check this code matches the one on Paper's page, then confirm there.",
+  "sign_in": "Sign in",
+  "cancel": "Cancel",
+  "open_page": "Open the page again",
+  "retry": "Try again",
+  "dismiss": "Dismiss",
+  "failed": {
+    "title": "Couldn't load Paper"
+  },
+  "offline": {
+    "title": "You're offline",
+    "body": "Check the connection, then try again."
+  },
+  "error": {
+    "not_approved": "Paper is waiting for you to allow it in Settings → Plugins on this chat's device.",
+    "offline": "Can't reach this chat's device right now.",
+    "not_installed": "Paper isn't on this chat's device. Install it in Settings → Plugins there.",
+    "off": "Paper is off on this chat's device. Turn it on in Settings → Plugins there.",
+    "version_mismatch": "This chat's device has another version of Paper. Update it in Settings → Plugins.",
+    "timeout": "This chat's device took too long to answer.",
+    "failed": "Something went wrong on this chat's device."
+  },
+  "designs": "Designs",
+  "new_design": "New design",
+  "new_hint": "Make a design, or open one, to link it to this project.",
+  "untitled": "Untitled",
+  "linked": "Linked in paper.json",
+  "link_failed": "Couldn't link this design in paper.json.",
+  "reload": "Reload",
+  "signin": {
+    "title": "Sign in to Paper",
+    "body": "Agents on this chat's device use Paper through your account."
+  },
+  "empty": {
+    "title": "No designs yet",
+    "body": "Designs this project links in paper.json show here."
+  },
+  "unavailable": {
+    "title": "Paper isn't available"
+  }
+}

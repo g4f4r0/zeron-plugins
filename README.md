@@ -6,11 +6,12 @@ My Zeron plugins, one folder per plugin, tagged per version (`<id>-v<version>`).
 |---|---|
 | [`executor`](executor/) | Adds the [executor.sh](https://executor.sh) MCP gateway to Zeron as one shared MCP server for every provider. |
 | [`desktop`](desktop/) | A Linux desktop for agents, live in the chat's panel. |
+| [`paper`](paper/) | Paper's live canvas in the chat's panel, and Paper's MCP tools for every agent. |
 
 ## Install
 
 ```
-install_plugin  url: g4f4r0/zeron-plugins  folder: executor   # or desktop
+install_plugin  url: g4f4r0/zeron-plugins  folder: executor   # or desktop, paper
 ```
 
 Then allow it in Settings → Plugins. Later versions show up there as an update.

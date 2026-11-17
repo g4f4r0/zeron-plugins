@@ -398,11 +398,9 @@ zeron.tab(KIND, function(tab: any): Node
 					tone = "quiet",
 					on_click = back,
 				},
-				words(if which == "new"
-					then zeron.t("new_hint")
-					else function(): string
-						return view:get().name or ""
-					end),
+				words(if which == "new" then "" else function(): string
+					return view:get().name or ""
+				end),
 				IconButton {
 					icon = "refresh",
 					label = zeron.t("reload"),

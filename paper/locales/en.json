@@ -31,7 +31,6 @@
   },
   "designs": "Designs",
   "new_design": "New design",
-  "new_hint": "Make a design, or open one, to link it to this project.",
   "untitled": "Untitled",
   "linked": "Linked in paper.json",
   "link_failed": "Couldn't link this design in paper.json.",

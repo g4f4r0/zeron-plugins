@@ -11,14 +11,13 @@
   "sign_in": "Sign in",
   "cancel": "Cancel",
   "open_page": "Open the page again",
-  "retry": "Try again",
-  "dismiss": "Dismiss",
   "failed": {
-    "title": "Couldn't load Paper"
+    "title": "Couldn't load Paper",
+    "body": "Trying again by itself."
   },
   "offline": {
     "title": "You're offline",
-    "body": "Check the connection, then try again."
+    "body": "Paper comes back by itself once you're online."
   },
   "error": {
     "not_approved": "Paper is waiting for you to allow it in Settings → Plugins on this chat's device.",
@@ -32,18 +31,17 @@
   "designs": "Designs",
   "new_design": "New design",
   "untitled": "Untitled",
-  "linked": "Linked in paper.json",
-  "link_failed": "Couldn't link this design in paper.json.",
-  "reload": "Reload",
   "signin": {
     "title": "Sign in to Paper",
     "body": "Agents on this chat's device use Paper through your account."
   },
   "empty": {
     "title": "No designs yet",
-    "body": "Designs this project links in paper.json show here."
+    "body": "Designs this project links in paper.json show here. New design makes one and links it."
   },
   "unavailable": {
     "title": "Paper isn't available"
-  }
+  },
+  "making": "Making a design…",
+  "new_failed": "Couldn't make a design in Paper."
 }

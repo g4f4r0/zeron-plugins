@@ -18,7 +18,7 @@ local LOGIN = "https://login.paper.design"
 -- server refuses.
 local RESOURCE = "https://mcp.paper.design"
 local PROTOCOL = "2025-06-18"
-local VERSION = "0.3.1"
+local VERSION = "0.4.0"
 
 local auth = zeron.store("auth", {} :: any)
 
@@ -503,7 +503,7 @@ end
 
 -- A design linked in the checkout's paper.json (made from the project's
 -- when the checkout has none of its own). Linked already: left as it is.
-zeron.serve("link", function(args: any)
+local function link_file(args: any): { linked: boolean, url: string }
 	local url = file_link(args and args.url)
 	if not url then
 		error("That isn't a Paper file's link.", 0)
@@ -539,4 +539,33 @@ zeron.serve("link", function(args: any)
 		error(`Couldn't write paper.json: {r.stderr}`, 0)
 	end
 	return { linked = true, url = url }
+end
+
+zeron.serve("link", link_file)
+
+-- New design: a file made in Paper (its create_file, as agents would) and
+-- linked in the checkout's paper.json, for the tab to open.
+zeron.serve("create", function(args: any)
+	if not folder(args and args.cwd) then
+		error("This chat has no folder to link a design in.", 0)
+	end
+	local result = rpc("tools/call", `\{"name":"create_file","arguments":\{\}\}`)
+	local made, said = nil, nil
+	for _, b in (type(result) == "table" and type(result.content) == "table" and result.content) or {} do
+		if type(b) == "table" and b.type == "text" then
+			said = said or b.text
+			local d = decode(b.text)
+			if type(d) == "table" and not made then
+				made = d
+			end
+		end
+	end
+	local id = made and (made.fileId or made.id)
+	local url = made and (file_link(made.url) or (if type(id) == "string" then `https://app.paper.design/file/{id}` else nil))
+	if (type(result) == "table" and result.isError) or not url then
+		error(if type(said) == "string" and said ~= "" then `Paper: {said}` else "Paper didn't make the design.", 0)
+	end
+	local name = if type(made.name) == "string" and made.name ~= "" then made.name else "Untitled"
+	link_file({ cwd = args.cwd, root = args.root, name = name, url = url })
+	return { url = url, name = name }
 end)

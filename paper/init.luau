@@ -9,18 +9,19 @@
 -- opens Paper's approval page where links open (Settings → Links), and the
 -- tab shows the code until it's approved. Signed in, it lists the designs the
 -- checkout links in its paper.json, drawn as the panel's home draws rows,
--- and New design. A design opens live in the same tab with a way back.
--- New design opens Paper's home: the design the person makes (or opens)
--- there is linked in the checkout's paper.json.
+-- and New design, which makes a file in Paper and links it. Each design
+-- opens live in a tab of its own, with Paper's panels folded (`minimal`);
+-- closing it is the way back.
 --
--- The view is drawn as Zeron's own browser tab draws a page: a ring while
--- it first loads, and what went wrong over it when it can't.
+-- Nothing asks to be reloaded: the list reads paper.json again now and then,
+-- and what can't be reached is tried again by itself. A design is drawn as
+-- Zeron's own browser tab draws a page: a ring while it first loads, and
+-- what went wrong over it while it can't.
 
 local zeron = require("./zeron")("paper")
 local PanelHome = require("@ds/panel_home")
 local EmptyState = require("@ds/empty_state")
 local Button = require("@ds/button")
-local IconButton = require("@ds/icon_button").IconButton
 
 local KIND = "canvas"
 local HOME = "https://app.paper.design/"
@@ -90,32 +91,21 @@ local REASONS = {
 	timeout = true,
 }
 
--- A Paper file's address alone (no page, no query); nil when it isn't one.
-local function file_link(url: any): string?
+-- A Paper file's id, from its address; nil when it isn't one.
+local function file_id(url: any): string?
 	if type(url) ~= "string" then
 		return nil
 	end
-	local id = string.match(url, "^https://app%.paper%.design/file/([%w_%-]+)")
-	return if id then `https://app.paper.design/file/{id}` else nil
+	return string.match(url, "^https://app%.paper%.design/file/([%w_%-]+)")
 end
 
--- A page's title as a design's name (Paper's own name for itself taken off).
-local function name_of(title: any): string?
-	if type(title) ~= "string" then
-		return nil
+-- A design's address as the tab loads it: with Paper's own `minimal`, so its
+-- panels start folded and the canvas has the room.
+local function minimal(url: string): string
+	if string.find(url, "[?&]minimal") then
+		return url
 	end
-	local t = string.match(title, "^%s*(.-)%s*$") or ""
-	for _, sep in { " - ", " | ", " – ", " — ", " · " } do
-		local tail = sep .. "Paper"
-		if #t > #tail and string.sub(t, -#tail) == tail then
-			t = string.sub(t, 1, #t - #tail)
-			break
-		end
-	end
-	if t == "" or t == "Paper" then
-		return nil
-	end
-	return t
+	return url .. (if string.find(url, "?", 1, true) then "&" else "?") .. "minimal"
 end
 
 local function open_tab(panel: any, session: any)
@@ -212,6 +202,15 @@ local function tile(): Node
 	}
 end
 
+-- A list of designs as one string, to tell when it changed.
+local function signature(files: any): string
+	local parts = {}
+	for _, f in files or {} do
+		table.insert(parts, `{f.name}\n{f.url}`)
+	end
+	return table.concat(parts, "\n\n")
+end
+
 -- WebKit's words for no network at all read as offline.
 local function offline(e: any): boolean
 	if type(e) ~= "string" then
@@ -223,52 +222,83 @@ local function offline(e: any): boolean
 		or string.find(l, "not connected", 1, true) ~= nil
 end
 
--- A line of the bar over the view: secondary words, a line at most.
-local function words(text: any): Node
-	return ui.text {
-		text,
-		grow = 1,
-		min_w = 0,
-		color = "$text.secondary",
-		text_size = "$font.size.sm",
-		line_height = "$font.line.sm",
-		truncate = true,
-	}
-end
-
--- The bar over the view, as the browser tab's: 40 high, its controls quiet.
-local function bar(id: string, ...: Node): Node
-	return ui.row {
-		id = id,
-		w_full = true,
-		min_h = 40,
-		shrink = 0,
-		px = "$space.2",
-		py = "$space.1",
-		gap = "$space.2",
-		items = "center",
-		live = "polite",
-		...,
-	}
-end
-
-zeron.tab(KIND, function(tab: any): Node
-	local data = tab.data or {}
-	local device = data.device
-	local web = page(`paper-{data.key or "home"}`)
-
-	-- What the tab shows once agents are signed in: the designs ("home"), a
-	-- design ("design", with its url and name) or Paper's home to make one
-	-- ("new").
-	local view = ui.use_state({ at = "home" } :: any)
-	-- The page: "loading" until a load commits, then "page".
-	local shown = ui.use_state("loading")
-	local dismissed = ui.use_state(false)
-	local function load(url: string)
-		shown:set("loading")
-		dismissed:set(false)
-		web:load(url)
+-- A design, live: the page alone, a ring while it first loads, and what went
+-- wrong over it while it can't load, tried again by itself every few seconds.
+-- Closing the tab is the way back.
+local function design(data: any): Node
+	local web = page(data.key)
+	local url = minimal(data.url)
+	local shown = ui.use_state(if type(web.url) == "string" and web.url ~= "" then "page" else "loading")
+	if shown:peek() == "loading" then
+		ui.after(0, function()
+			web:load(url)
+		end)
 	end
+	local function trouble(): boolean
+		local e = web.error
+		return type(e) == "string" and e ~= ""
+	end
+	ui.every(5000, function()
+		if trouble() then
+			local u = web.url
+			web:load(if type(u) == "string" and u ~= "" then u else url)
+		end
+	end)
+	return ui.column {
+		relative = true,
+		w_full = true,
+		grow = 1,
+		min_h = 0,
+		(ui :: any).webview {
+			id = `paper-view-{data.key}`,
+			label = data.name or zeron.s("tab.home"),
+			web = web,
+			w_full = true,
+			grow = 1,
+			min_h = 0,
+			on_navigate = function(e: any)
+				if type(e) == "table" and (e.kind == "committed" or e.kind == "finished" or e.kind == "failed") then
+					shown:set("page")
+				end
+			end,
+		},
+		ui.show(function(): boolean
+			return shown:get() == "loading" and not trouble()
+		end, ui.column {
+			absolute = true,
+			left = 0,
+			right = 0,
+			top = 0,
+			bottom = 0,
+			bg = "$background",
+			working(),
+		}),
+		ui.show(trouble, ui.column {
+			absolute = true,
+			left = 0,
+			right = 0,
+			top = 0,
+			bottom = 0,
+			bg = "$background",
+			ui.presence(function(): string
+				return if offline(web.error) then "offline" else "failed"
+			end, function(which: string): Node
+				return EmptyState {
+					icon = if which == "offline" then "wifi-off" else "danger-triangle",
+					size = "sm",
+					fill = true,
+					title = zeron.t(`{which}.title`),
+					body = zeron.t(`{which}.body`),
+				}
+			end, { w_full = true, grow = 1, min_h = 0 }),
+		}),
+	}
+end
+
+-- The Paper tab: agents' sign-in on the chat's device, then the designs the
+-- checkout links, each opening in a tab of its own.
+local function designs_tab(data: any): Node
+	local device = data.device
 
 	-- Agents' sign-in on the chat's device: { phase = "checking" | "in" |
 	-- "out" | "asking" | "code" | "error", code?, url?, why? }.
@@ -289,8 +319,10 @@ zeron.tab(KIND, function(tab: any): Node
 		local r = zeron.reason(err)
 		return if REASONS[r] then r else "failed"
 	end
-	local function check()
-		agents:set({ phase = "checking" })
+	local function check(quiet: boolean?)
+		if not quiet then
+			agents:set({ phase = "checking" })
+		end
 		zeron.service(device):call("status", {}):after(told, function(err: any)
 			agents:set({ phase = "error", why = why(err) })
 		end)
@@ -313,187 +345,81 @@ zeron.tab(KIND, function(tab: any): Node
 			agents:set({ phase = "error", why = why(err) })
 		end)
 	end
-	-- A code out: asked again now and then until it's approved.
-	ui.every(3000, function()
-		if agents:peek().phase ~= "code" then
-			return
-		end
-		zeron.service(device):call("status", {}):after(told, function() end)
-	end)
 
 	-- The checkout's designs: { phase = "loading" | "ready" | "error",
-	-- files?, why? }.
+	-- files?, why? }. Read again now and then, so a design an agent or a
+	-- person links shows by itself.
 	local list = ui.use_state({ phase = "loading" } :: any)
-	local function designs()
-		list:set({ phase = "loading" })
+	local function designs(quiet: boolean?)
+		if not quiet then
+			list:set({ phase = "loading" })
+		end
 		zeron.service(device):call("designs", { cwd = data.cwd, root = data.root }):after(function(r: any)
-			list:set({ phase = "ready", files = if type(r) == "table" and type(r.files) == "table" then r.files else {} })
+			local files = if type(r) == "table" and type(r.files) == "table" then r.files else {}
+			local was = list:peek()
+			if was.phase == "ready" and signature(was.files) == signature(files) then
+				return
+			end
+			list:set({ phase = "ready", files = files })
 		end, function(err: any)
 			list:set({ phase = "error", why = why(err) })
 		end)
 	end
 	designs()
 
-	local function open_design(f: any)
-		view:set({ at = "design", url = f.url, name = f.name })
-		load(f.url)
-	end
-	local function new_design()
-		view:set({ at = "new" })
-		load(HOME)
-	end
-	local function back()
-		view:set({ at = "home" })
-		designs()
-	end
-
-	-- New design: the file the page reaches is linked in paper.json, once.
-	local linking = false
-	ui.every(1000, function()
-		if linking or view:peek().at ~= "new" or agents:peek().phase ~= "in" then
-			return
+	-- Everything comes back by itself: a code out is asked about until it's
+	-- approved, an error is tried again, and paper.json is read again.
+	local beat = 0
+	ui.every(3000, function()
+		beat += 1
+		local a = agents:peek()
+		if a.phase == "code" or (a.phase == "error" and beat % 2 == 0) then
+			check(true)
+		elseif a.phase == "in" and beat % 2 == 0 then
+			designs(list:peek().phase ~= "error")
 		end
-		local url = file_link(web.url)
-		if not url then
-			return
-		end
-		linking = true
-		local name = name_of(web.title) or zeron.s("untitled")
-		zeron.service(device)
-			:call("link", { cwd = data.cwd, root = data.root, name = name, url = url })
-			:after(function(r: any)
-				linking = false
-				if view:peek().at == "new" then
-					view:set({ at = "design", url = url, name = name })
-				end
-				if type(r) == "table" and r.linked then
-					zeron.toast(zeron.s("linked"))
-				end
-			end, function(err: any)
-				linking = false
-				if view:peek().at == "new" then
-					view:set({ at = "design", url = url, name = name })
-				end
-				local said = if type(err) == "table" then err.message else err
-				zeron.toast(if type(said) == "string" and said ~= "" then said else zeron.s("link_failed"))
-			end)
 	end)
 
-	local function trouble(): boolean
-		local e = web.error
-		return type(e) == "string" and e ~= "" and not dismissed:get()
-	end
-
-	-- The bar over the view: the way back, what's shown, and reload.
-	local function top(): Node
-		return ui.presence(function(): string
-			return view:get().at
-		end, function(which: string): Node
-			return bar(
-				"paper-bar",
-				IconButton {
-					icon = "arrow-left",
-					label = zeron.t("designs"),
-					tooltip_side = "bottom",
-					tone = "quiet",
-					on_click = back,
-				},
-				words(if which == "new" then "" else function(): string
-					return view:get().name or ""
-				end),
-				IconButton {
-					icon = "refresh",
-					label = zeron.t("reload"),
-					tooltip_side = "bottom",
-					tone = "quiet",
-					on_click = function()
-						local u = web.url
-						load(if type(u) == "string" and u ~= "" then u else HOME)
-					end,
-				}
-			)
-		end, { w_full = true })
-	end
-
-	-- The view, as the browser tab draws its page.
-	local function canvas(): Node
-		return ui.column {
-			w_full = true,
-			grow = 1,
-			min_h = 0,
-			top(),
-			ui.column {
-				relative = true,
-				w_full = true,
-				grow = 1,
-				min_h = 0,
-				(ui :: any).webview {
-					id = `paper-view-{data.key or "home"}`,
-					label = zeron.t("tab.home"),
-					web = web,
-					w_full = true,
-					grow = 1,
-					min_h = 0,
-					on_navigate = function(e: any)
-						if type(e) ~= "table" then
-							return
-						end
-						if e.kind == "started" then
-							dismissed:set(false)
-						elseif e.kind == "committed" or e.kind == "finished" or e.kind == "failed" then
-							shown:set("page")
-						end
-					end,
-				},
-				ui.show(function(): boolean
-					return shown:get() == "loading" and not trouble()
-				end, ui.column {
-					absolute = true,
-					left = 0,
-					right = 0,
-					top = 0,
-					bottom = 0,
-					bg = "$background",
-					working(),
-				}),
-				ui.show(trouble, ui.column {
-					absolute = true,
-					left = 0,
-					right = 0,
-					top = 0,
-					bottom = 0,
-					bg = "$background",
-					ui.presence(function(): string
-						return if offline(web.error) then "offline" else "failed"
-					end, function(which: string): Node
-						return EmptyState {
-							icon = if which == "offline" then "wifi-off" else "danger-triangle",
-							size = "sm",
-							fill = true,
-							title = zeron.t(`{which}.title`),
-							body = if which == "offline"
-								then zeron.t("offline.body")
-								else function(): string
-									return web.error or ""
-								end,
-							action = {
-								label = zeron.t("retry"),
-								on_click = function()
-									local u = web.url
-									load(if type(u) == "string" and u ~= "" then u else HOME)
-								end,
-							},
-							secondary = {
-								label = zeron.t("dismiss"),
-								on_click = function()
-									dismissed:set(true)
-								end,
-							},
-						}
-					end, { w_full = true, grow = 1, min_h = 0 }),
-				}),
+	local function open_design(f: any)
+		local id = file_id(f.url)
+		local panel = zeron.context("panel")
+		if not id or not panel then
+			return
+		end
+		panel.open_tab {
+			kind = KIND,
+			title = f.name or zeron.s("untitled"),
+			icon = "palette",
+			data = {
+				key = `paper-file-{id}-{data.cwd or device or "local"}`,
+				device = device,
+				cwd = data.cwd,
+				root = data.root,
+				url = f.url,
+				name = f.name,
 			},
 		}
+	end
+
+	-- New design: Paper makes a file, the service links it in paper.json,
+	-- and it opens in its own tab.
+	local making = ui.use_state(false)
+	local function new_design()
+		if making:peek() then
+			return
+		end
+		making:set(true)
+		zeron.service(device):call("create", { cwd = data.cwd, root = data.root }):after(function(r: any)
+			making:set(false)
+			designs(true)
+			if type(r) == "table" and type(r.url) == "string" then
+				open_design(r)
+			end
+		end, function(err: any)
+			making:set(false)
+			local said = if type(err) == "table" then err.message else err
+			zeron.toast(if type(said) == "string" and said ~= "" then said else zeron.s("new_failed"))
+		end)
 	end
 
 	-- The designs, as the panel's home lists what opens there: a heading,
@@ -530,8 +456,7 @@ zeron.tab(KIND, function(tab: any): Node
 					gap = "$zeron.list.gap",
 					PanelHome.Heading { label = zeron.t("designs") },
 					ui.presence(function(): string
-						local l = list:get()
-						return `{#(l.files or {})}`
+						return signature(list:get().files)
 					end, function(): Node
 						local rows: { Node } = {}
 						for i, f in list:peek().files or {} do
@@ -549,13 +474,17 @@ zeron.tab(KIND, function(tab: any): Node
 						end
 						return ui.column { w_full = true, gap = "$zeron.list.gap", table.unpack(rows) }
 					end, { w_full = true }),
-					PanelHome.Row {
-						id = "paper-new",
-						icon = "plus" :: any,
-						label = zeron.t("new_design"),
-						tone = "muted",
-						on_click = new_design,
-					},
+					ui.presence(function(): string
+						return if making:get() then "making" else "new"
+					end, function(which: string): Node
+						return PanelHome.Row {
+							id = "paper-new",
+							icon = (if which == "making" then ring(16, zeron.s("making")) else "plus") :: any,
+							label = zeron.t(if which == "making" then "making" else "new_design"),
+							tone = "muted",
+							on_click = new_design,
+						}
+					end, { w_full = true }),
 				},
 			},
 		}
@@ -635,14 +564,14 @@ zeron.tab(KIND, function(tab: any): Node
 		}
 	end
 
-	local function error_page(reason: string, again: () -> ()): Node
+	-- What can't be reached yet, said once; it's tried again by itself.
+	local function error_page(reason: string): Node
 		return EmptyState {
 			icon = if reason == "offline" then "wifi-off" else "danger-triangle",
 			size = "sm",
 			fill = true,
 			title = zeron.t("unavailable.title"),
 			body = zeron.t(`error.{reason}`),
-			action = { label = zeron.t("retry"), on_click = again },
 		}
 	end
 
@@ -661,15 +590,11 @@ zeron.tab(KIND, function(tab: any): Node
 			elseif a.phase == "code" then
 				return "code"
 			end
-			local at = view:get().at
-			if at ~= "home" then
-				return "canvas"
-			end
 			local l = list:get()
 			if l.phase == "loading" then
 				return "working"
 			elseif l.phase == "error" then
-				return `list.{l.why}`
+				return `error.{l.why}`
 			end
 			return if #(l.files or {}) == 0 then "empty" else "home"
 		end, function(which: string): Node
@@ -687,22 +612,33 @@ zeron.tab(KIND, function(tab: any): Node
 					action = { label = zeron.t("sign_in"), on_click = signin },
 				}
 			elseif string.sub(which, 1, 6) == "error." then
-				return error_page(string.sub(which, 7), check)
-			elseif string.sub(which, 1, 5) == "list." then
-				return error_page(string.sub(which, 6), designs)
+				return error_page(string.sub(which, 7))
 			elseif which == "empty" then
-				return EmptyState {
-					art = tile(),
-					size = "sm",
-					fill = true,
-					title = zeron.t("empty.title"),
-					body = zeron.t("empty.body"),
-					action = { label = zeron.t("new_design"), icon = "plus", on_click = new_design },
-				}
-			elseif which == "home" then
-				return home()
+				return ui.presence(function(): string
+					return if making:get() then "making" else "new"
+				end, function(state: string): Node
+					if state == "making" then
+						return working()
+					end
+					return EmptyState {
+						art = tile(),
+						size = "sm",
+						fill = true,
+						title = zeron.t("empty.title"),
+						body = zeron.t("empty.body"),
+						action = { label = zeron.t("new_design"), icon = "plus", on_click = new_design },
+					}
+				end, { w_full = true, grow = 1, min_h = 0 })
 			end
-			return canvas()
+			return home()
 		end, { w_full = true, grow = 1, min_h = 0 }),
 	}
+end
+
+zeron.tab(KIND, function(tab: any): Node
+	local data = tab.data or {}
+	if type(data.url) == "string" then
+		return design(data)
+	end
+	return designs_tab(data)
 end)

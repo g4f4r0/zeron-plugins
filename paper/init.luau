@@ -9,9 +9,9 @@
 -- opens Paper's approval page where links open (Settings → Links), and the
 -- tab shows the code until it's approved. Signed in, it lists the designs the
 -- checkout links in its paper.json, drawn as the panel's home draws rows,
--- and New design, which makes a file in Paper and links it. Each design
--- opens live in a tab of its own, with Paper's panels folded (`minimal`);
--- closing it is the way back.
+-- and New design, which makes a file in Paper and links it. A design opens
+-- live in the same tab, in place of the list, with Paper's panels folded
+-- (`minimal`) and no bar; closing the tab is the way back.
 --
 -- Nothing asks to be reloaded: the list reads paper.json again now and then,
 -- and what can't be reached is tried again by itself. A design is drawn as
@@ -90,14 +90,6 @@ local REASONS = {
 	version_mismatch = true,
 	timeout = true,
 }
-
--- A Paper file's id, from its address; nil when it isn't one.
-local function file_id(url: any): string?
-	if type(url) ~= "string" then
-		return nil
-	end
-	return string.match(url, "^https://app%.paper%.design/file/([%w_%-]+)")
-end
 
 -- A design's address as the tab loads it: with Paper's own `minimal`, so its
 -- panels start folded and the canvas has the room.
@@ -223,36 +215,51 @@ local function offline(e: any): boolean
 		or string.find(l, "not connected", 1, true) ~= nil
 end
 
--- A design, live: the page alone, a ring while it first loads, and what went
--- wrong over it while it can't load, tried again by itself every few seconds.
--- Closing the tab is the way back.
-local function design(data: any): Node
-	local web = page(data.key)
-	local url = minimal(data.url)
+-- A tab's page for designs: the web page, whether it has shown yet, and
+-- loads tried again by themselves every few seconds while they fail. Made
+-- at the top of a tab's build (it holds state).
+type Viewer = { web: any, shown: any, open: (url: string) -> (), trouble: () -> boolean }
+local function viewer(key: string): Viewer
+	local web = page(key)
 	local shown = ui.use_state(if type(web.url) == "string" and web.url ~= "" then "page" else "loading")
-	if shown:peek() == "loading" then
-		ui.after(0, function()
-			web:load(url)
-		end)
-	end
+	local wanted: string? = nil
 	local function trouble(): boolean
 		local e = web.error
 		return type(e) == "string" and e ~= ""
 	end
 	ui.every(5000, function()
-		if trouble() then
+		if wanted and trouble() then
 			local u = web.url
-			web:load(if type(u) == "string" and u ~= "" then u else url)
+			web:load(if type(u) == "string" and u ~= "" then u else wanted)
 		end
 	end)
+	return {
+		web = web,
+		shown = shown,
+		trouble = trouble,
+		open = function(url: string)
+			local u = minimal(url)
+			wanted = u
+			if web.url ~= u then
+				shown:set("loading")
+				web:load(u)
+			end
+		end,
+	}
+end
+
+-- A design, live: the page alone, a ring while it first loads, and what went
+-- wrong over it while it can't load. Closing the tab is the way back.
+local function design(v: Viewer, label: string, key: string): Node
+	local web, shown, trouble = v.web, v.shown, v.trouble
 	return ui.column {
 		relative = true,
 		w_full = true,
 		grow = 1,
 		min_h = 0,
 		(ui :: any).webview {
-			id = `paper-view-{data.key}`,
-			label = data.name or zeron.s("tab.home"),
+			id = `paper-view-{key}`,
+			label = label,
 			web = web,
 			w_full = true,
 			grow = 1,
@@ -381,29 +388,19 @@ local function designs_tab(data: any): Node
 		end
 	end)
 
+	-- A design opens here, in place of the list.
+	local v = viewer(`paper-{data.key or "home"}`)
+	local opened = ui.use_state(nil :: any)
 	local function open_design(f: any)
-		local id = file_id(f.url)
-		local panel = zeron.context("panel")
-		if not id or not panel then
+		if type(f) ~= "table" or type(f.url) ~= "string" then
 			return
 		end
-		panel.open_tab {
-			kind = KIND,
-			title = f.name or zeron.s("untitled"),
-			icon = "palette",
-			data = {
-				key = `paper-file-{id}-{data.cwd or device or "local"}`,
-				device = device,
-				cwd = data.cwd,
-				root = data.root,
-				url = f.url,
-				name = f.name,
-			},
-		}
+		opened:set({ url = f.url, name = f.name })
+		v.open(f.url)
 	end
 
 	-- New design: Paper makes a file, the service links it in paper.json,
-	-- and it opens in its own tab.
+	-- and it opens here.
 	local making = ui.use_state(false)
 	local function new_design()
 		if making:peek() then
@@ -591,6 +588,9 @@ local function designs_tab(data: any): Node
 			elseif a.phase == "code" then
 				return "code"
 			end
+			if opened:get() then
+				return "design"
+			end
 			local l = list:get()
 			if l.phase == "loading" then
 				return "working"
@@ -630,6 +630,8 @@ local function designs_tab(data: any): Node
 						action = { label = zeron.t("new_design"), icon = "plus", on_click = new_design },
 					}
 				end, { w_full = true, grow = 1, min_h = 0 })
+			elseif which == "design" then
+				return design(v, (opened:peek() or {}).name or zeron.s("tab.home"), data.key or "home")
 			end
 			return home()
 		end, { w_full = true, grow = 1, min_h = 0 }),
@@ -638,8 +640,13 @@ end
 
 zeron.tab(KIND, function(tab: any): Node
 	local data = tab.data or {}
+	-- A design in a tab of its own (as 0.4.0 opened them).
 	if type(data.url) == "string" then
-		return design(data)
+		local v = viewer(data.key)
+		ui.after(0, function()
+			v.open(data.url)
+		end)
+		return design(v, data.name or zeron.s("tab.home"), data.key)
 	end
 	return designs_tab(data)
 end)

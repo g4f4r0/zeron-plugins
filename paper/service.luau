@@ -13,8 +13,12 @@ local zeron = require("./zeron")("paper")
 
 local MCP = "https://mcp.paper.design/"
 local LOGIN = "https://login.paper.design"
+-- The resource tokens are for (RFC 8707): asked for on every token request,
+-- or Paper's login hands back a token for the client alone, which the MCP
+-- server refuses.
+local RESOURCE = "https://mcp.paper.design"
 local PROTOCOL = "2025-06-18"
-local VERSION = "0.1.2"
+local VERSION = "0.1.3"
 
 local auth = zeron.store("auth", {} :: any)
 
@@ -118,6 +122,7 @@ local function poll_once(): boolean
 		grant_type = "urn:ietf:params:oauth:grant-type:device_code",
 		device_code = p.device_code,
 		client_id = client_id(),
+		resource = RESOURCE,
 	})
 	if status < 300 and type(d) == "table" and d.access_token then
 		keep(d)
@@ -147,7 +152,7 @@ local function start_signin(): Pending
 	local status, d = post_form("/oauth2/device_authorization", {
 		client_id = client_id(),
 		scope = "openid offline_access",
-		resource = "https://mcp.paper.design",
+		resource = RESOURCE,
 	})
 	if status >= 300 or type(d) ~= "table" or type(d.device_code) ~= "string" then
 		error(`Paper didn't give a sign-in code (HTTP {status})`, 0)
@@ -199,6 +204,7 @@ local function token(force: boolean?): string?
 		grant_type = "refresh_token",
 		refresh_token = a.refresh,
 		client_id = a.client_id or client_id(),
+		resource = RESOURCE,
 	})
 	refreshing = false
 	if not ok then

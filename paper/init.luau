@@ -5,9 +5,9 @@
 --
 -- The panel's empty page gets one Paper row (key P), as Desktop's. Its tab
 -- first asks whether agents on the chat's device are signed in to Paper:
--- while they aren't, it says so as an empty page with Sign in, then shows
--- the code over Paper's own approval page, in the tab's view, where the
--- person is already signed in. Signed in, it lists the designs the
+-- while they aren't, it says so as an empty page with Sign in. Sign in
+-- opens Paper's approval page where links open (Settings → Links), and the
+-- tab shows the code until it's approved. Signed in, it lists the designs the
 -- checkout links in its paper.json, drawn as the panel's home draws rows,
 -- and New design. A design opens live in the same tab with a way back.
 -- New design opens Paper's home: the design the person makes (or opens)
@@ -230,7 +230,7 @@ zeron.tab(KIND, function(tab: any): Node
 		zeron.service(device):call("signin", {}):after(function(s: any)
 			told(s)
 			if type(s) == "table" and type(s.url) == "string" then
-				load(s.url)
+				zeron.open_url(s.url)
 			end
 		end, function(err: any)
 			agents:set({ phase = "error", why = why(err) })
@@ -312,58 +312,11 @@ zeron.tab(KIND, function(tab: any): Node
 		return type(e) == "string" and e ~= "" and not dismissed:get()
 	end
 
-	-- The bar over the view: the code while one is out, else the way back.
+	-- The bar over the view: the way back, what's shown, and reload.
 	local function top(): Node
 		return ui.presence(function(): string
-			if agents:get().phase == "code" then
-				return "code"
-			end
 			return view:get().at
 		end, function(which: string): Node
-			if which == "code" then
-				return bar(
-					"paper-signin",
-					ui.div {
-						shrink = 0,
-						px = "$space.1",
-						color = "$text.secondary",
-						Progress.ProgressRing { size = 12, tone = "neutral", label = zeron.t("signing_in") },
-					},
-					ui.text {
-						zeron.t("code_check"),
-						grow = 1,
-						min_w = 0,
-						color = "$text.secondary",
-						text_size = "$font.size.sm",
-						line_height = "$font.line.sm",
-						wrap = true,
-					},
-					ui.text {
-						function(): string
-							return agents:get().code or ""
-						end,
-						id = "paper-code",
-						shrink = 0,
-						font = "$font.mono",
-						text_size = "$font.size.lg",
-						weight = "$font.weight.semibold",
-						color = "$text.primary",
-						selectable = true,
-					},
-					Button {
-						zeron.t("open_page"),
-						tone = "ghost",
-						size = "sm",
-						on_click = function()
-							local u = agents:peek().url
-							if type(u) == "string" then
-								load(u)
-							end
-						end,
-					},
-					Button { zeron.t("cancel"), tone = "secondary", size = "sm", on_click = cancel }
-				)
-			end
 			return bar(
 				"paper-bar",
 				IconButton {
@@ -538,6 +491,80 @@ zeron.tab(KIND, function(tab: any): Node
 		}
 	end
 
+	-- A code out: Zeron's empty state's page, its tile a ring, the code under
+	-- its words, as Settings' provider rows show a sign-in's code.
+	local function waiting(): Node
+		return ui.column {
+			id = "paper-signin",
+			items = "center",
+			justify = "center",
+			gap = "$space.3",
+			w_full = true,
+			grow = 1,
+			py = "$space.5",
+			live = "polite",
+			ui.row {
+				w = 36,
+				h = 36,
+				shrink = 0,
+				items = "center",
+				justify = "center",
+				color = "$text.secondary",
+				Progress.ProgressRing { size = 16, tone = "neutral", label = zeron.t("signing_in") },
+			},
+			ui.column {
+				items = "center",
+				gap = "$space.1",
+				max_w = 340,
+				ui.text {
+					zeron.t("signing_in"),
+					align = "center",
+					text_size = "$font.size.md",
+					line_height = "$font.line.md",
+					weight = "$font.weight.medium",
+					color = "$text.primary",
+					wrap = true,
+				},
+				ui.text {
+					zeron.t("code_check"),
+					align = "center",
+					text_size = "$font.size.sm",
+					line_height = "$font.line.sm",
+					color = "$text.secondary",
+					wrap = true,
+				},
+			},
+			ui.text {
+				function(): string
+					return agents:get().code or ""
+				end,
+				id = "paper-code",
+				font = "$font.mono",
+				text_size = "$font.size.lg",
+				weight = "$font.weight.semibold",
+				color = "$text.primary",
+				selectable = true,
+			},
+			ui.row {
+				gap = "$space.2",
+				items = "center",
+				pt = "$space.1",
+				Button {
+					zeron.t("open_page"),
+					tone = "secondary",
+					size = "sm",
+					on_click = function()
+						local u = agents:peek().url
+						if type(u) == "string" then
+							zeron.open_url(u)
+						end
+					end,
+				},
+				Button { zeron.t("cancel"), tone = "ghost", size = "sm", on_click = cancel },
+			},
+		}
+	end
+
 	local function error_page(reason: string, again: () -> ()): Node
 		return EmptyState {
 			icon = if reason == "offline" then "wifi-off" else "danger-triangle",
@@ -562,7 +589,7 @@ zeron.tab(KIND, function(tab: any): Node
 			elseif a.phase == "error" then
 				return `error.{a.why}`
 			elseif a.phase == "code" then
-				return "canvas"
+				return "code"
 			end
 			local at = view:get().at
 			if at ~= "home" then
@@ -578,6 +605,8 @@ zeron.tab(KIND, function(tab: any): Node
 		end, function(which: string): Node
 			if which == "working" then
 				return working(zeron.t("loading"))
+			elseif which == "code" then
+				return waiting()
 			elseif which == "out" then
 				return EmptyState {
 					icon = "palette",

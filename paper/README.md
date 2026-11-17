@@ -30,7 +30,7 @@ New design opens Paper's home in the tab. The first file you make or open there 
 - `service.luau` runs on each device where the plugin is allowed. It holds that device's Paper sign-in and answers both tools, even with no window open.
 - Sign-in uses OAuth's device flow at `login.paper.design`. The service registers itself once as the public client "Zeron Paper". Access tokens last minutes and each refresh token works only once, so the service refreshes one at a time and stores each new token.
 - Paper's MCP is streamable HTTP at `https://mcp.paper.design/`. The service opens a session, keeps its id, and passes requests through. On a 401 it refreshes and retries. On a 404 or 400 it opens a new session. Replies may be JSON or an event stream.
-- When agents aren't signed in, a tool call fails with the link and code to approve. The tab opens on a Sign in page instead of the list. Sign in shows the code in a bar over Paper's approval page, in the same view where the person is already signed in to Paper, and the list shows once the code is approved.
+- When agents aren't signed in, a tool call fails with the link and code to approve. The tab opens on a Sign in page instead of the list. Sign in opens Paper's approval page where Zeron opens links (Settings → Links), usually the default browser, and the tab shows the code with Open the page again and Cancel until it's approved. Then the list shows.
 - `init.luau` draws the tab with Zeron's own pieces: the panel home's rows and heading for the list, Zeron's empty state for signed out, no designs and errors, and a ring while anything loads. The view follows Zeron's browser tab, with a 40-point bar and the offline or failed state over the page, with Try again and Dismiss.
 
 ## Permissions
@@ -40,6 +40,7 @@ The plugin asks for these:
 - `network`, limited to `mcp.paper.design` and `login.paper.design`.
 - `tools` and `service`, for the two agent tools.
 - `ui.add`, `panel.tabs` and `web`, for the panel and the canvas.
+- `links.open`, for opening Paper's sign-in page.
 - `sessions.read`, `files.read` and `commands`, limited to `cat` and `tee`, for reading and writing `paper.json`. Only the chat's `paper.json` is written, and only when New design links a file.
 
 ## Sign-in per device

@@ -18,7 +18,7 @@ local LOGIN = "https://login.paper.design"
 -- server refuses.
 local RESOURCE = "https://mcp.paper.design"
 local PROTOCOL = "2025-06-18"
-local VERSION = "0.4.0"
+local VERSION = "0.4.1"
 
 local auth = zeron.store("auth", {} :: any)
 
@@ -543,13 +543,40 @@ end
 
 zeron.serve("link", link_file)
 
+-- A new design's name: the project's (else its folder's), numbered from the
+-- second on ("Shop", "Shop 2", …) among the names already linked.
+local function new_name(args: any, cwd: string): string
+	local base = if type(args.name) == "string" and string.match(args.name, "%S")
+		then string.sub(string.match(args.name, "^%s*(.-)%s*$") :: string, 1, 100)
+		else string.match(cwd, "([^/]+)/*$") or "Untitled"
+	local taken: { [string]: boolean } = {}
+	for _, dir in { cwd, folder(args.root) or false } do
+		if dir and next(taken) == nil then
+			local _, d = read_links(dir)
+			for _, f in (type(d) == "table" and type(d.files) == "table" and d.files) or {} do
+				if type(f) == "table" and type(f.name) == "string" then
+					taken[string.lower(f.name)] = true
+				end
+			end
+		end
+	end
+	local name, n = base, 1
+	while taken[string.lower(name)] do
+		n += 1
+		name = `{base} {n}`
+	end
+	return name
+end
+
 -- New design: a file made in Paper (its create_file, as agents would) and
 -- linked in the checkout's paper.json, for the tab to open.
 zeron.serve("create", function(args: any)
-	if not folder(args and args.cwd) then
+	local cwd = folder(args and args.cwd)
+	if not cwd then
 		error("This chat has no folder to link a design in.", 0)
 	end
-	local result = rpc("tools/call", `\{"name":"create_file","arguments":\{\}\}`)
+	local wanted = new_name(args, cwd)
+	local result = rpc("tools/call", `\{"name":"create_file","arguments":\{"name":{zeron.json.encode(wanted)}\}\}`)
 	local made, said = nil, nil
 	for _, b in (type(result) == "table" and type(result.content) == "table" and result.content) or {} do
 		if type(b) == "table" and b.type == "text" then
@@ -565,7 +592,7 @@ zeron.serve("create", function(args: any)
 	if (type(result) == "table" and result.isError) or not url then
 		error(if type(said) == "string" and said ~= "" then `Paper: {said}` else "Paper didn't make the design.", 0)
 	end
-	local name = if type(made.name) == "string" and made.name ~= "" then made.name else "Untitled"
+	local name = if type(made.name) == "string" and made.name ~= "" then made.name else wanted
 	link_file({ cwd = args.cwd, root = args.root, name = name, url = url })
 	return { url = url, name = name }
 end)

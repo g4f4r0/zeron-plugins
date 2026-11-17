@@ -119,6 +119,7 @@ local function open_tab(panel: any, session: any)
 			device = session.device,
 			cwd = session.cwd,
 			root = project and project.path,
+			project = project and project.name,
 		},
 	}
 end
@@ -409,7 +410,7 @@ local function designs_tab(data: any): Node
 			return
 		end
 		making:set(true)
-		zeron.service(device):call("create", { cwd = data.cwd, root = data.root }):after(function(r: any)
+		zeron.service(device):call("create", { cwd = data.cwd, root = data.root, name = data.project }):after(function(r: any)
 			making:set(false)
 			designs(true)
 			if type(r) == "table" and type(r.url) == "string" then

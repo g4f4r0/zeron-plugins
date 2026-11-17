@@ -23,7 +23,7 @@ A project links its Paper files in `paper.json` at its root:
 
 An empty panel has one Paper row, and P opens it, as D opens Desktop. The Paper tab lists the designs in `paper.json`, and New design under them. Each design opens in a tab of its own with Paper's panels folded (Paper's `?minimal`), and closing that tab is the way back. A worktree without its own `paper.json` uses its project's. Only `https://app.paper.design/` links are shown.
 
-New design asks Paper for a new file (its `create_file`, through the device's sign-in), adds it to the checkout's `paper.json` as `https://app.paper.design/file/<id>`, and opens it. A worktree with no `paper.json` of its own gets one, starting from its project's list. A file already linked isn't added twice, and a `paper.json` that isn't valid JSON is left alone.
+New design asks Paper for a new file (its `create_file`, through the device's sign-in), named after the project (else its folder) and numbered from the second on, such as "Shop" then "Shop 2". It adds it to the checkout's `paper.json` as `https://app.paper.design/file/<id>`, and opens it. A worktree with no `paper.json` of its own gets one, starting from its project's list. A file already linked isn't added twice, and a `paper.json` that isn't valid JSON is left alone.
 
 Nothing in the tab asks to be reloaded. The list reads `paper.json` again every few seconds, so a design an agent links shows by itself, and a design that can't load, or a device that can't be reached, is tried again until it can.
 

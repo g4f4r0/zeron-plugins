@@ -156,14 +156,23 @@ zeron.place {
 -- give plugins one (Paper's sign-in kept apart and between runs), and the
 -- page able to tell the tab things (`window.zgx.postMessage`), which copy
 -- and paste go through.
-local function page(id: string): any
+--
+-- Paper edits only in Chrome: it reads the user agent for "Chrome/" and,
+-- without it, opens every file view-only ("Your browser doesn't support
+-- features required by Paper"). Zeron's web view on macOS is WebKit, so the
+-- page says it's Chrome. (Paper reads the system from `navigator.platform`,
+-- which stays the device's own.) The page's id carries `ua` so a page made
+-- before this, which kept WebKit's own agent, isn't reused.
+local AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+local function page(key: string): any
+	local id = `{key}-ua`
 	local ok, web = pcall(function()
-		return (ui :: any).web(id, { profile = "paper", messages = true })
+		return (ui :: any).web(id, { profile = "paper", messages = true, user_agent = AGENT })
 	end)
 	if ok and web then
 		return web
 	end
-	return (ui :: any).web(id, { messages = true })
+	return (ui :: any).web(id, { messages = true, user_agent = AGENT })
 end
 
 -- Copy and paste. Zeron's web view doesn't give a page this device's

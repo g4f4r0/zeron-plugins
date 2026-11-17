@@ -45,6 +45,7 @@ The page gets the clipboard only while Zeron's window is in front, and only Pape
 - Paper's MCP is streamable HTTP at `https://mcp.paper.design/`. The service opens a session, keeps its id, and passes requests through. On a 401 it refreshes and retries. On a 404 or 400 it opens a new session. Replies may be JSON or an event stream.
 - When agents aren't signed in, a tool call fails with the link and code to approve, and the tab opens on a Sign in page instead of the list. Sign in shows Paper's approval page in the tab itself, with the code filled in. The person logs in to Paper there and approves, and the list shows.
 - `init.luau` draws the tabs with Zeron's own pieces: the panel home's rows and heading for the list, Zeron's empty state for signed out, no designs and errors, and Zeron's spinning ring while anything loads (with the engine stepping its clock, so it turns). Paper's mark (`icon.svg`) shows in Settings → Plugins and on the panel's Paper row; the tabs themselves use Zeron's palette glyph, since tabs take only Zeron's own glyphs. An open design is the page alone, with no bar, and the offline or failed state over it while it can't load.
+- Paper lets a file be edited only in Chrome. It looks for `Chrome/` in the browser's user agent, and anywhere else it opens every file view-only, with a banner to download Paper Desktop. Zeron's web view on macOS is WebKit, so the canvas page gives a Chrome user agent. Paper reads the system from `navigator.platform`, which stays the device's own.
 
 ## Permissions
 

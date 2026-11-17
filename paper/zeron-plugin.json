@@ -1,7 +1,7 @@
 {
   "id": "paper",
   "name": "Paper",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "icon": "icon.svg",
   "description": "Paper designs for every agent, live on the chat's panel.",
   "entry": "init.luau",
@@ -63,13 +63,13 @@
   "signature": {
     "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
     "files": {
-      "README.md": "1102eb8dd854902cae5ac2cbf1b74e73fa23caeba24f21913498e776275c6efd",
+      "README.md": "360692a5207e9b1d75ff48ddd45e18407bb3ffb78a7c7b9cd47357101f19f3a0",
       "icon.svg": "b17150cb15572da86c535ede9fc3513b5f1001cdb3b3f2a13238ca9a25a110a3",
-      "init.luau": "c2f816b11ae0c5c3b6a94e6ed7efcd68a6236153a789a2543b8d66c5fa893607",
+      "init.luau": "47af7fa1e290fefccd01f5a1dd154636947315b00ef9a74b97fe77e2b0bc87ab",
       "locales/en.json": "826dd13c7b64b75c81e96ad932de9519e48c34fa4e0a723fcfa19f7da058bd50",
-      "service.luau": "be55123aaf8c233ada09df90b911a59cdc236b6df97acef309b6aae1cd7b6bb7",
+      "service.luau": "df6975db9dc00de93a804ca1bb1aca3989ccb33c8477e9723beecafbb32e2f65",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "2bU9drVQ3_4-DnFOj9LEW5jh5wd3d7X8VuAmZcey0-CRAOI4SUpTeRGUvZpE4Ens1GDlJEh1wNgTDe8RCfDgCg"
+    "sig": "Cno5oBof-L9WrkNMRQmD9NhJ0xw0n_zk5iQl-7KSVHGuiySkMKRErx3dUfZzePauZ4-FzpB4fpCrdeD4W8aXBA"
   }
 }

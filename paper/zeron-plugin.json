@@ -1,38 +1,74 @@
 {
   "id": "paper",
   "name": "Paper",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "icon": "icon.svg",
-  "description": "Paper designs live on the chat's panel, and where each agent stands with Paper's MCP.",
+  "description": "Paper designs for every agent, live on the chat's panel.",
   "entry": "init.luau",
   "service": "service.luau",
   "permissions": [
+    "tools",
     "service",
+    "network",
     "ui.add",
     "panel.tabs",
     "web",
     "sessions.read",
     "files.read",
     "commands",
-    "clipboard"
+    "links.open"
   ],
   "commands": [
     "cat",
     "tee",
-    "claude",
-    "codex",
-    "pi"
+    "openssl"
+  ],
+  "network": {
+    "hosts": [
+      "mcp.paper.design",
+      "login.paper.design"
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_tools",
+      "description": "List Paper's design tools (MCP tools/list from Paper's server) with their input schemas and Paper's instructions. Call once before using Paper. A project's Paper files are linked in paper.json at its root.",
+      "input": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "call_tool",
+      "description": "Call one of Paper's tools by name (tools/call). Arguments go to Paper unchanged; Paper's result comes back unchanged.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "A tool name from list_tools."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "That tool's arguments, as its input schema says."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    }
   ],
   "signature": {
     "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
     "files": {
-      "README.md": "55ed52545f9db60affafdc8d5adef17cb8842ac8e013c2064835f958c6da1970",
+      "README.md": "00692a7eafd7bd62f373a34dd9bdf263f6bfc1c247c0b2ce96c1f052054f2241",
       "icon.svg": "b17150cb15572da86c535ede9fc3513b5f1001cdb3b3f2a13238ca9a25a110a3",
-      "init.luau": "c0f01b1c4ee8baea06ca8cf1647ea59c32d26b077f66fe590ad1756656c9c5b4",
-      "locales/en.json": "936ff5c7c403520efe96f124f1011b0e338f16c7af14df6bb32900a3436df906",
-      "service.luau": "7c3f17a0ef39080d883422e575f8051a23f488aedd4f66f0f5077b7f3e39154d",
+      "init.luau": "9a8e554b3656a3891f8feaa0514dcdf595ddb69d7133f18ebaea0b4b89960f91",
+      "locales/en.json": "9c7996f4c262ad326cb88ea83bbecff0ad2761752d8b619b7107ce9a7ea7365c",
+      "service.luau": "5cf495f95661a17b3ba31f828e47504da27685165bfe95dcebfc7c2ed5da4e53",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "OpTp1iwN4LEHhQJMwOoA8CRBseIi8dC_35mit1SlFfTwWfZsBB8tr4DvtxnzCuUcVMY96Sd5kM9F1SC9s-XEDg"
+    "sig": "S8fLc9fVR-HTFjyJ3uoCQO8-I_lHC8j9NecVE5LY6b2mTmRCzzhRFqlPFGqGfd9LvpqUT6fHOiMfYYdcQ9kCCQ"
   }
 }

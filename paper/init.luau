@@ -1,15 +1,17 @@
 --!strict
 -- Paper: the chat's Paper designs, live in its panel. Agents reach Paper
--- through Paper's own MCP server, set up in each harness with its own
--- sign-in; this window shows the canvas they work on.
+-- through the two tools the service answers (list_tools and
+-- call_tool); this window shows the canvas they work on.
 --
 -- The panel's empty page gets one Paper row (key P), as Desktop's. Its tab
--- lists the designs the checkout links in its paper.json, drawn as the
--- panel's home draws rows, with New design under them, and then the agent
--- harnesses on the chat's device and where each stands with Paper. One not
--- yet set up or signed in copies the command that does it. A design opens
--- live in the same tab with a way back. New design opens Paper's home: the
--- design the person makes (or opens) there is linked in paper.json.
+-- first asks whether agents on the chat's device are signed in to Paper:
+-- while they aren't, it says so as an empty page with Sign in. Sign in
+-- opens Paper's approval page where links open (Settings → Links), and the
+-- tab shows the code until it's approved. Signed in, it lists the designs the
+-- checkout links in its paper.json, drawn as the panel's home draws rows,
+-- and New design. A design opens live in the same tab with a way back.
+-- New design opens Paper's home: the design the person makes (or opens)
+-- there is linked in the checkout's paper.json.
 --
 -- The view is drawn as Zeron's own browser tab draws a page: a ring while
 -- it first loads, and what went wrong over it when it can't.
@@ -17,9 +19,8 @@
 local zeron = require("./zeron")("paper")
 local PanelHome = require("@ds/panel_home")
 local EmptyState = require("@ds/empty_state")
+local Button = require("@ds/button")
 local IconButton = require("@ds/icon_button").IconButton
-local AgentMark = require("@ds/agent_mark")
-local Badge = require("@ds/badge").Badge
 
 local KIND = "canvas"
 local HOME = "https://app.paper.design/"
@@ -193,6 +194,24 @@ local function working(): Node
 	}
 end
 
+-- Paper's mark on the quiet tile an empty state draws its glyph on (sm).
+local function tile(): Node
+	return ui.row {
+		w = 36,
+		h = 36,
+		shrink = 0,
+		aria_hidden = true,
+		items = "center",
+		justify = "center",
+		rounded = "$radius.xl",
+		bg = "$zeron.secondary.bg",
+		border = 1,
+		border_color = "$border.subtle",
+		color = "$text.secondary",
+		mark(18),
+	}
+end
+
 -- WebKit's words for no network at all read as offline.
 local function offline(e: any): boolean
 	if type(e) ~= "string" then
@@ -238,7 +257,7 @@ zeron.tab(KIND, function(tab: any): Node
 	local device = data.device
 	local web = page(`paper-{data.key or "home"}`)
 
-	-- What the tab shows: the designs and agents ("home"), a
+	-- What the tab shows once agents are signed in: the designs ("home"), a
 	-- design ("design", with its url and name) or Paper's home to make one
 	-- ("new").
 	local view = ui.use_state({ at = "home" } :: any)
@@ -251,33 +270,56 @@ zeron.tab(KIND, function(tab: any): Node
 		web:load(url)
 	end
 
+	-- Agents' sign-in on the chat's device: { phase = "checking" | "in" |
+	-- "out" | "asking" | "code" | "error", code?, url?, why? }.
+	local agents = ui.use_state({ phase = "checking" } :: any)
+	local function told(s: any)
+		if type(s) ~= "table" then
+			return
+		end
+		if s.signed_in then
+			agents:set({ phase = "in" })
+		elseif s.code then
+			agents:set({ phase = "code", code = s.code, url = s.url })
+		else
+			agents:set({ phase = "out" })
+		end
+	end
 	local function why(err: any): string
 		local r = zeron.reason(err)
 		return if REASONS[r] then r else "failed"
 	end
-
-	-- The harnesses on the chat's device and where each stands with Paper:
-	-- { phase = "loading" | "ready" | "error", agents?, why? }.
-	local harnesses = ui.use_state({ phase = "loading" } :: any)
 	local function check()
-		harnesses:set({ phase = "loading", agents = harnesses:peek().agents })
-		zeron.service(device):call("agents", {}):after(function(r: any)
-			harnesses:set({ phase = "ready", agents = if type(r) == "table" and type(r.agents) == "table" then r.agents else {} })
-		end, function(err: any)
-			harnesses:set({ phase = "error", why = why(err) })
+		agents:set({ phase = "checking" })
+		zeron.service(device):call("status", {}):after(told, function(err: any)
+			agents:set({ phase = "error", why = why(err) })
 		end)
 	end
 	check()
 
-	-- A harness not ready yet: the command that sets it up or signs it in,
-	-- copied to run in a terminal on the chat's device.
-	local function copy(a: any)
-		if type(a.command) ~= "string" then
+	local function signin()
+		agents:set({ phase = "asking" })
+		zeron.service(device):call("signin", {}):after(function(s: any)
+			told(s)
+			if type(s) == "table" and type(s.url) == "string" then
+				zeron.open_url(s.url)
+			end
+		end, function(err: any)
+			agents:set({ phase = "error", why = why(err) })
+		end)
+	end
+	local function cancel()
+		zeron.service(device):call("cancel", {}):after(told, function(err: any)
+			agents:set({ phase = "error", why = why(err) })
+		end)
+	end
+	-- A code out: asked again now and then until it's approved.
+	ui.every(3000, function()
+		if agents:peek().phase ~= "code" then
 			return
 		end
-		pcall(ui.clipboard.write, a.command)
-		zeron.toast(zeron.s("copied", { command = a.command }))
-	end
+		zeron.service(device):call("status", {}):after(told, function() end)
+	end)
 
 	-- The checkout's designs: { phase = "loading" | "ready" | "error",
 	-- files?, why? }.
@@ -303,13 +345,12 @@ zeron.tab(KIND, function(tab: any): Node
 	local function back()
 		view:set({ at = "home" })
 		designs()
-		check()
 	end
 
 	-- New design: the file the page reaches is linked in paper.json, once.
 	local linking = false
 	ui.every(1000, function()
-		if linking or view:peek().at ~= "new" then
+		if linking or view:peek().at ~= "new" or agents:peek().phase ~= "in" then
 			return
 		end
 		local url = file_link(web.url)
@@ -517,66 +558,81 @@ zeron.tab(KIND, function(tab: any): Node
 						tone = "muted",
 						on_click = new_design,
 					},
-					ui.div { h = "$space.4", shrink = 0 },
-					PanelHome.Heading {
-						label = zeron.t("agents"),
-						trail = IconButton {
-							icon = "refresh",
-							label = zeron.t("check_again"),
-							size = "sm",
-							tone = "quiet",
-							on_click = check,
-						},
-					},
-					ui.presence(function(): string
-						local h = harnesses:get()
-						if h.phase == "error" then
-							return `error.{h.why}`
-						end
-						local parts = { h.phase }
-						for _, a in h.agents or {} do
-							table.insert(parts, `{a.id}:{a.state}`)
-						end
-						return table.concat(parts, ",")
-					end, function(which: string): Node
-						local h = harnesses:peek()
-						if string.sub(which, 1, 6) == "error." then
-							return PanelHome.Row {
-								id = "paper-agents-error",
-								icon = "danger-triangle" :: any,
-								label = zeron.t(`error.{h.why}`),
-								tone = "muted",
-								on_click = check,
-							}
-						end
-						if h.agents == nil then
-							return ui.row { w_full = true, h = PanelHome.ROW_H, items = "center", justify = "center", ring(16, zeron.s("loading")) }
-						end
-						if #h.agents == 0 then
-							return PanelHome.Row { id = "paper-agents-none", icon = "info" :: any, label = zeron.t("no_agents"), tone = "muted" }
-						end
-						local rows: { Node } = {}
-						for _, a in h.agents do
-							local tone = if a.state == "in" then "success" elseif a.state == "error" then "danger" else "neutral"
-							table.insert(
-								rows,
-								PanelHome.Row {
-									id = `paper-agent-{a.id}`,
-									icon = AgentMark { label = a.name, mark = a.mark, size = PanelHome.ICON, bare = true } :: any,
-									label = a.name,
-									tooltip = if type(a.command) == "string" then zeron.s("copy_hint", { command = a.command }) else a.why,
-									trail = Badge { zeron.t(`state.{a.state}`), tone = tone :: any, dot = true },
-									on_click = if type(a.command) == "string"
-										then function()
-											copy(a)
-										end
-										else nil,
-								} :: any
-							)
-						end
-						return ui.column { w_full = true, gap = "$zeron.list.gap", table.unpack(rows) }
-					end, { w_full = true }),
 				},
+			},
+		}
+	end
+
+	-- A code out: Zeron's empty state's page, its tile a ring, the code under
+	-- its words, as Settings' provider rows show a sign-in's code.
+	local function waiting(): Node
+		return ui.column {
+			id = "paper-signin",
+			items = "center",
+			justify = "center",
+			gap = "$space.3",
+			w_full = true,
+			grow = 1,
+			py = "$space.5",
+			live = "polite",
+			ui.row {
+				w = 36,
+				h = 36,
+				shrink = 0,
+				items = "center",
+				justify = "center",
+				color = "$text.secondary",
+				ring(16, zeron.s("signing_in")),
+			},
+			ui.column {
+				items = "center",
+				gap = "$space.1",
+				max_w = 340,
+				ui.text {
+					zeron.t("signing_in"),
+					align = "center",
+					text_size = "$font.size.md",
+					line_height = "$font.line.md",
+					weight = "$font.weight.medium",
+					color = "$text.primary",
+					wrap = true,
+				},
+				ui.text {
+					zeron.t("code_check"),
+					align = "center",
+					text_size = "$font.size.sm",
+					line_height = "$font.line.sm",
+					color = "$text.secondary",
+					wrap = true,
+				},
+			},
+			ui.text {
+				function(): string
+					return agents:get().code or ""
+				end,
+				id = "paper-code",
+				font = "$font.mono",
+				text_size = "$font.size.lg",
+				weight = "$font.weight.semibold",
+				color = "$text.primary",
+				selectable = true,
+			},
+			ui.row {
+				gap = "$space.2",
+				items = "center",
+				pt = "$space.1",
+				Button {
+					zeron.t("open_page"),
+					tone = "secondary",
+					size = "sm",
+					on_click = function()
+						local u = agents:peek().url
+						if type(u) == "string" then
+							zeron.open_url(u)
+						end
+					end,
+				},
+				Button { zeron.t("cancel"), tone = "ghost", size = "sm", on_click = cancel },
 			},
 		}
 	end
@@ -597,6 +653,16 @@ zeron.tab(KIND, function(tab: any): Node
 		grow = 1,
 		min_h = 0,
 		ui.presence(function(): string
+			local a = agents:get()
+			if a.phase == "checking" or a.phase == "asking" then
+				return "working"
+			elseif a.phase == "out" then
+				return "out"
+			elseif a.phase == "error" then
+				return `error.{a.why}`
+			elseif a.phase == "code" then
+				return "code"
+			end
 			local at = view:get().at
 			if at ~= "home" then
 				return "canvas"
@@ -607,12 +673,34 @@ zeron.tab(KIND, function(tab: any): Node
 			elseif l.phase == "error" then
 				return `list.{l.why}`
 			end
-			return "home"
+			return if #(l.files or {}) == 0 then "empty" else "home"
 		end, function(which: string): Node
 			if which == "working" then
 				return working()
+			elseif which == "code" then
+				return waiting()
+			elseif which == "out" then
+				return EmptyState {
+					art = tile(),
+					size = "sm",
+					fill = true,
+					title = zeron.t("signin.title"),
+					body = zeron.t("signin.body"),
+					action = { label = zeron.t("sign_in"), on_click = signin },
+				}
+			elseif string.sub(which, 1, 6) == "error." then
+				return error_page(string.sub(which, 7), check)
 			elseif string.sub(which, 1, 5) == "list." then
 				return error_page(string.sub(which, 6), designs)
+			elseif which == "empty" then
+				return EmptyState {
+					art = tile(),
+					size = "sm",
+					fill = true,
+					title = zeron.t("empty.title"),
+					body = zeron.t("empty.body"),
+					action = { label = zeron.t("new_design"), icon = "plus", on_click = new_design },
+				}
 			elseif which == "home" then
 				return home()
 			end

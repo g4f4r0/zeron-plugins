@@ -6,6 +6,11 @@
     "home": "Paper"
   },
   "loading": "Loading…",
+  "signing_in": "Signing in to Paper",
+  "code_check": "Check this code matches the one on Paper's page, then confirm there.",
+  "sign_in": "Sign in",
+  "cancel": "Cancel",
+  "open_page": "Open the page again",
   "retry": "Try again",
   "dismiss": "Dismiss",
   "failed": {
@@ -31,18 +36,15 @@
   "linked": "Linked in paper.json",
   "link_failed": "Couldn't link this design in paper.json.",
   "reload": "Reload",
+  "signin": {
+    "title": "Sign in to Paper",
+    "body": "Agents on this chat's device use Paper through your account."
+  },
+  "empty": {
+    "title": "No designs yet",
+    "body": "Designs this project links in paper.json show here."
+  },
   "unavailable": {
     "title": "Paper isn't available"
-  },
-  "agents": "Agents on this device",
-  "check_again": "Check again",
-  "no_agents": "No Claude Code, Codex or Pi found on this device.",
-  "copy_hint": "Copy {command}, to run in a terminal on this device",
-  "copied": "Copied. Run it in a terminal on this device: {command}",
-  "state": {
-    "in": "Ready",
-    "out": "Sign in",
-    "missing": "Set up",
-    "error": "Not working"
   }
 }

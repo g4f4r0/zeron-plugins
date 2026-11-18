@@ -23,7 +23,7 @@ The desktop is display `:1` (Xvfb, 1920x1080) with the Openbox window manager, a
 4. Optionally, put a wallpaper at `~/.config/agent-desktop/wallpaper.jpg`, or point `AGENT_DESKTOP_WALLPAPER` at one. Without one the desktop is a plain dark blue.
 5. Install the desktop with `bash ~/.zeron/plugins/desktop/host/desktop.sh install`. The script copies itself to `~/.local/share/agent-desktop/`, and the units run that copy. Then run `loginctl enable-linger $USER` so the desktop keeps running after you log out.
 6. To watch the desktop from other devices, publish the stream on the tailnet with `sudo tailscale serve --bg --https=6443 http://127.0.0.1:6080`.
-7. Point `agent-browser` at Fortress with `echo '{"cdp": "9222"}' > ~/.agent-browser/config.json`. Agents run `agent-desktop` with `DISPLAY=:1`.
+7. Make Fortress the browser every `agent-browser` session launches. Run `ln -sfn "$(ls -d ~/.local/share/fortress/*/fortress-* | sort -V | tail -1)" ~/.local/share/fortress/current`, then `echo "{\"executablePath\": \"$HOME/.local/share/fortress/current/tilion\"}" > ~/.agent-browser/config.json`. Each agent then gets its own headless, sandboxed Fortress, and passes `--cdp 9222` only to drive the desktop's shared one while someone watches. Never run `agent-browser install`, because its Chrome has no AppArmor profile. After a Fortress upgrade, rerun the `ln` command. Agents run `agent-desktop` with `DISPLAY=:1`.
 
 Allow the plugin in Zeron (Settings → Plugins) on the device hosting the desktop and on every device you watch it from. It asks for `commands`, which lets it run `systemctl` as you; its service needs that to read and start the units. It also asks for `clipboard`, for copy and paste between your device and the desktop.
 

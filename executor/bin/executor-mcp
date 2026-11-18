@@ -14,7 +14,10 @@ MAX_AGE="${ZERON_EXECUTOR_MAX_AGE:-86400}"   # seconds between update checks
 mkdir -p "$STATE"
 
 # Zeron may start us with a thin PATH; add Bun's and Node's usual homes and the login shell's PATH.
-PATH="$HOME/.bun/bin:$HOME/.local/node/bin:$PATH"
+# Bun installs globals under $BUN_INSTALL, which defaults to ~/.bun only for a Bun installed there; a Bun
+# elsewhere, such as ~/.local/node/bin, would update a copy this PATH never runs.
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+PATH="$BUN_INSTALL/bin:$HOME/.local/node/bin:$PATH"
 LOGIN_PATH="$(bash -lc 'printf %s "$PATH"' 2>/dev/null || true)"
 [ -n "$LOGIN_PATH" ] && PATH="$LOGIN_PATH:$PATH"
 export PATH
@@ -39,7 +42,7 @@ stale() {
 if stale; then
   if have bun; then
     log "installing/updating executor@$CHANNEL with bun"
-    if bun install -g "executor@$CHANNEL" >&2; then
+    if bun add -g "executor@$CHANNEL" >&2; then
       date +%s > "$STAMP"
     else
       log "install failed"

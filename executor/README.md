@@ -7,7 +7,7 @@ Adds [executor.sh](https://executor.sh) to Zeron as one shared MCP server, `plug
 The manifest's `mcp` entry makes Zeron start `bin/executor-mcp` through `bash`. (A plain `./bin/executor-mcp` command doesn't work for installed copies: installing from git or a `.zeron-plugin` package drops the executable bit, and the server then fails with `EACCES`. It reads the script from the plugin's installed folder, `~/.zeron/plugins/executor/`.) That launcher:
 
 1. checks that Node.js is on the PATH, and says so in the log if not (Executor's launcher runs on Node);
-2. installs Executor with Bun (`bun install -g executor@beta`) if it's missing, and refreshes it once a day; if Bun is missing too, it says so in the log;
+2. installs Executor with Bun into `$BUN_INSTALL` (default `~/.bun`), the copy it then runs (`bun add -g executor@beta`), if it's missing, and refreshes it once a day; if Bun is missing too, it says so in the log;
 3. if Codex is installed, restores Codex's `codex-code-mode-host` in the background when it's missing (see below);
 4. runs `executor mcp`, Executor's own stdio MCP server, which passes each message to the host you're signed in to (Cloud, self-hosted, or the local background server) and renews the sign-in as it goes.
 

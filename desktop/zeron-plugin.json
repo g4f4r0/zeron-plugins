@@ -1,7 +1,7 @@
 {
   "id": "desktop",
   "name": "Desktop",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A Linux desktop for agents, live in the chat's panel.",
   "entry": "init.luau",
   "service": "service.luau",
@@ -20,7 +20,7 @@
   "signature": {
     "key": "PDPeqL8XKhJbEOAiNTrCG6FrzT-YndEmrhzQC0SJjDA",
     "files": {
-      "README.md": "fbc9883db395fd58bf205d7f7cd49e684e7623c296e7e680144d6330bcf30309",
+      "README.md": "bf973535113bdc333c38cfbac6af5c0f28b6faf8fc4b355540333aa12e02e8b9",
       "host/chromium-policy.json": "6f7ffa5e668d12762a660bb6177aa29beb384c0e2aea20b0220a8634160bd08f",
       "host/desktop.sh": "87024568da6005d5daf1bb68e670c10ece2d8932177defc782fd52fe992e3d67",
       "host/fortress.apparmor": "2001f53b3100f0d29fa16f7a8e3c677b1695007b515ff5e79c7bf00bc909369d",
@@ -29,6 +29,6 @@
       "service.luau": "e1b85d7baaccd7b8201039330e9e6156b6bdc52fd8e3d5bca15ab6246cf23b46",
       "zeron.luau": "178b79b55566c9643b26181539b8e1348482179a169da98ba384cd66f3f8a483"
     },
-    "sig": "ltEq-KL6DmKPbyxvEnE1ixsYf6o81c2Hj6nuYXF6KgoJ0XHfwo7jV1Sqr2PVLmUQpnazbmcUnbcx0CNkdznKDA"
+    "sig": "pLOADv5IH2bEKAJ-Zc2ZHYp5WUhgJlSky0pvYmBn_BqnVIubK3MioFPrS3sQF0ICHAYJIVwH5brV2CvUHi3sAw"
   }
 }
